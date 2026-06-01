@@ -1,0 +1,1 @@
+Summarize likely weather and planning tips for each day.

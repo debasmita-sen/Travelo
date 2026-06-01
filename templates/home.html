@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="starfield" aria-hidden="true">
+  <span class="stars-layer stars-small"></span>
+  <span class="stars-layer stars-medium"></span>
+  <span class="stars-layer stars-large"></span>
+</div>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <a class="logo-lockup" href="{{ url_for('home.home') }}" aria-label="Travelo home">
+        <span class="travel-mark" aria-hidden="true">
+          <img src="{{ url_for('static', filename='images/travelo-logo.png') }}" alt="">
+        </span>
+        <span><strong>Travelo</strong><small>Agentic travel copilot</small></span>
+      </a>
+      <button class="new-chat" id="newChatButton" type="button">
+        <span>+</span> New trip
+      </button>
+    </div>
+
+    <div class="history-block">
+      <div class="sidebar-label">History</div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="status-pill"><span></span> Groq + live tools</div>
+      <p>WeatherAPI, NewsData, routes, crowds, budget, and attractions.</p>
+    </div>
+  </aside>
+
+  <main class="assistant-main">
+    <header class="topbar">
+      <button class="icon-button mobile-menu" id="menuButton" type="button" aria-label="Open history">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="topbar-title">
+        <img class="topbar-logo slow-spin" src="{{ url_for('static', filename='images/travelo-logo.png') }}" alt="">
+        <span>Travelo</span>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
+        <span class="theme-toggle-track">
+          <span class="theme-toggle-thumb">
+            <svg class="sun-icon" viewBox="0 0 24 24"><path d="M12 4V2m0 20v-2m8-8h2M2 12h2m13.7-5.7 1.4-1.4M4.9 19.1l1.4-1.4m0-11.4L4.9 4.9m14.2 14.2-1.4-1.4M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
+            <svg class="moon-icon" viewBox="0 0 24 24"><path d="M20.4 15.5A8.5 8.5 0 0 1 8.5 3.6 7.5 7.5 0 1 0 20.4 15.5Z"/></svg>
+          </span>
+        </span>
+        <span class="theme-label">Dark</span>
+      </button>
+    </header>
+
+    <section class="welcome-stage" id="welcomeStage">
+      <div class="orb orb-one"></div>
+      <div class="orb orb-two"></div>
+      <div class="hero-card">
+        <div class="assistant-avatar" aria-hidden="true">
+          <img class="slow-spin" src="{{ url_for('static', filename='images/travelo-logo.png') }}" alt="">
+        </div>
+        <p class="eyebrow">Your AI travel workspace</p>
+        <h1><span id="welcomeText"></span><span class="caret"></span></h1>
+        <p class="subheading"><span id="subheadingText"></span><span class="caret subtle-caret"></span></p>
+      </div>
+    </section>
+
+    <section class="chat-workspace" id="chatWorkspace" aria-live="polite">
+      <div class="messages" id="messages"></div>
+    </section>
+
+    <section class="composer-wrap">
+      <form class="trip-context" id="tripContextForm">
+        <label>Destination <input id="destinationInput" name="destination" placeholder="Paris, Goa, Tokyo"></label>
+        <label>Start <input id="startDateInput" name="start_date" type="date"></label>
+        <label>End <input id="endDateInput" name="end_date" type="date"></label>
+        <label>Travelers <input id="travelersInput" name="travelers" type="number" min="1" value="1"></label>
+        <label>Budget <input id="budgetInput" name="budget" type="number" min="0" step="50" placeholder="1200"></label>
+        <label>Interests <input id="interestsInput" name="interests" placeholder="food, beaches, museums"></label>
+      </form>
+
+      <form class="composer" id="chatForm">
+        <textarea id="messageInput" rows="1" placeholder="Ask Travelo to plan a detailed trip, e.g. Plan 3 days in Paris for food and art under 1500"></textarea>
+        <button class="send-button" type="submit" aria-label="Send message">
+          <svg viewBox="0 0 24 24"><path d="M4 12 20 4l-5.2 16-3.5-6.4L4 12Zm7.6.1 2.1 3.8 2.4-7.3-7.1 3.4 2.6.1Z"/></svg>
+        </button>
+      </form>
+      <p class="composer-hint">Travelo will use specialist tools, then generate a detailed bullet travel report.</p>
+    </section>
+  </main>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/planner.js') }}"></script>
+{% endblock %}

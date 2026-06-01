@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Full Itinerary</h1>
+  {% if plan %}
+    <pre>{{ plan.context.itinerary | tojson(indent=2) }}</pre>
+  {% else %}
+    <p>No itinerary has been generated yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

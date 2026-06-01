@@ -1,0 +1,1 @@
+Estimate trip costs and flag whether the budget is comfortable or tight.

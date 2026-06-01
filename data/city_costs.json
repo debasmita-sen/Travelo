@@ -1,0 +1,8 @@
+{
+  "paris": {"daily_lodging": 145, "daily_food": 55, "daily_transport": 18, "activity_average": 28},
+  "tokyo": {"daily_lodging": 120, "daily_food": 45, "daily_transport": 16, "activity_average": 24},
+  "new york": {"daily_lodging": 190, "daily_food": 65, "daily_transport": 22, "activity_average": 35},
+  "london": {"daily_lodging": 160, "daily_food": 58, "daily_transport": 20, "activity_average": 30},
+  "goa": {"daily_lodging": 55, "daily_food": 20, "daily_transport": 12, "activity_average": 14},
+  "default": {"daily_lodging": 90, "daily_food": 35, "daily_transport": 14, "activity_average": 20}
+}

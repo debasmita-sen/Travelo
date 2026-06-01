@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Trip Planner</h1>
+  <form method="post" class="grid-form">
+    <label>Destination <input name="destination" required placeholder="Paris"></label>
+    <label>Origin <input name="origin" placeholder="Hotel or airport"></label>
+    <label>Start date <input type="date" name="start_date" required></label>
+    <label>End date <input type="date" name="end_date" required></label>
+    <label>Travelers <input type="number" name="travelers" value="1" min="1" required></label>
+    <label>Budget <input type="number" name="budget" value="1000" min="0" step="50" required></label>
+    <label class="wide">Interests <input name="interests" placeholder="art, food, history"></label>
+    <button class="button" type="submit">Generate plan</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>Dashboard</h1>
+  {% if not plan %}
+    <p>No plan yet. Create one from the planner.</p>
+  {% else %}
+    <div class="manager-card">
+      <h2>Manager Summary</h2>
+      <p>{{ plan.manager_summary }}</p>
+    </div>
+    <h2>Itinerary</h2>
+    <div class="cards">
+      {% for day in plan.context.itinerary.days %}
+      <article class="card">
+        <h3>{{ day.title }}</h3>
+        <p>Weather: {{ day.weather.condition }}. Crowd: {{ day.crowd_level }}.</p>
+        <ul>
+          {% for activity in day.activities %}<li>{{ activity }}</li>{% endfor %}
+        </ul>
+      </article>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

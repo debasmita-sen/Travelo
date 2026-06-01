@@ -1,0 +1,7 @@
+{
+  "paris": {"country": "France", "themes": ["art", "food", "history", "romance"]},
+  "tokyo": {"country": "Japan", "themes": ["food", "technology", "anime", "temples"]},
+  "new york": {"country": "USA", "themes": ["museums", "theater", "food", "skyline"]},
+  "london": {"country": "UK", "themes": ["history", "markets", "theater", "royal"]},
+  "goa": {"country": "India", "themes": ["beaches", "nightlife", "heritage", "seafood"]}
+}
