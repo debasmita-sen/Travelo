@@ -5,8 +5,10 @@ from flask import Blueprint, jsonify, request
 
 from agents.general_chat_agent import GeneralChatAgent
 from agents.manager.orchestrator import SmartTripOrchestrator
+from config import GROQ_API_KEY, GROQ_MODEL, LLM_PROVIDER
 from models.trip import TripRequest
 from services.currency_service import parse_budget_text, parse_budget_value
+from services.history_service import delete_history_item, list_history, save_history_item, get_conversation, delete_conversation
 
 api_bp = Blueprint("api", __name__)
 
@@ -82,7 +84,7 @@ def _extract_trip(payload):
     if traveler_match and not payload.get("travelers"):
         travelers = _safe_int(traveler_match.group(1), travelers)
 
-    budget_match = re.search(r"(?:budget|under|within)\s*[$???]?\s*(\d+(?:\.\d+)?)", message, re.IGNORECASE)
+    budget_match = re.search(r"(?:budget|under|within)\s*(?:₹|rs\.?|inr|\$|usd|eur|€|gbp|£|jpy|¥)?\s*(\d+(?:\.\d+)?)", message, re.IGNORECASE)
     if budget_match and not payload.get("budget"):
         budget_info = parse_budget_text(message, destination)
 
@@ -146,15 +148,116 @@ def api_plan():
 def api_chat():
     payload = request.get_json(force=True)
     message = payload.get("message", "")
-    if not _should_use_trip_tools(payload):
-        return jsonify({
+    conversation_id = payload.get("conversation_id")
+    use_tools = payload.get("use_tools", True)  # Default to True if not specified
+    
+    # If we are in an active conversation, just answer the question in context of history
+    if conversation_id:
+        conversation_history = get_conversation(conversation_id)
+        if conversation_history:
+            system = (
+                "You are Travelo, a helpful chat assistant. Answer the user's question directly. "
+                "Use clear, practical language. Answer the question asked in the context of the conversation "
+                "and previous travel plan if any. If the user asks about travel, food, drinks, culture, "
+                "or places, provide useful suggestions with enough detail to be useful: what it is, "
+                "why it matters, where to try it, and any safety or budget tip if relevant. "
+                "Do not use markdown bold formatting or double asterisks."
+            )
+            messages_list = [{"role": "system", "content": system}]
+            for item in conversation_history:
+                user_msg = item.get("message")
+                if user_msg:
+                    messages_list.append({"role": "user", "content": user_msg})
+                
+                if item.get("type") == "chat":
+                    assistant_msg = item.get("answer")
+                else:
+                    report = item.get("report") or {}
+                    assistant_msg = report.get("manager_summary") or f"Travel plan to {item.get('destination')} generated."
+                
+                if assistant_msg:
+                    messages_list.append({"role": "assistant", "content": assistant_msg})
+            
+            messages_list.append({"role": "user", "content": message})
+            
+            answer = GeneralChatAgent().llm.generate(messages_list, temperature=0.5)
+            if "not configured" in answer:
+                answer = "Groq is not configured right now, so I can only use the app's built-in travel tools and deterministic fallback reports."
+                
+            result = {
+                "type": "chat",
+                "answer": answer,
+                "user_message": message,
+                "llm_status": _llm_status(),
+            }
+            saved_item = save_history_item("chat", "Chat", message, {"answer": answer}, conversation_id)
+            result["history_id"] = saved_item["id"]
+            result["conversation_id"] = saved_item["conversation_id"]
+            return jsonify(result)
+
+    # If tools are disabled or conditions don't warrant tool use, use Groq-only
+    if not use_tools or not _should_use_trip_tools(payload):
+        answer = GeneralChatAgent().answer(message)
+        result = {
             "type": "chat",
-            "answer": GeneralChatAgent().answer(message),
+            "answer": answer,
             "user_message": message,
-        })
+            "llm_status": _llm_status(),
+        }
+        saved_item = save_history_item("chat", "Chat", message, {"answer": answer}, conversation_id)
+        result["history_id"] = saved_item["id"]
+        result["conversation_id"] = saved_item["conversation_id"]
+        return jsonify(result)
 
     trip = _extract_trip(payload)
     result = SmartTripOrchestrator().plan(trip, user_message=message)
     result["type"] = "travel_plan"
     result["user_message"] = message
+    result["llm_status"] = _llm_status()
+    saved_item = save_history_item(
+        "travel_plan",
+        result.get("trip", {}).get("destination") or trip.destination or "Trip",
+        message,
+        result,
+        conversation_id
+    )
+    result["history_id"] = saved_item["id"]
+    result["conversation_id"] = saved_item["conversation_id"]
     return jsonify(result)
+
+
+@api_bp.get("/history")
+def api_history():
+    return jsonify({"history": list_history()})
+
+
+@api_bp.get("/conversation/<conversation_id>")
+def api_get_conversation(conversation_id):
+    messages = get_conversation(conversation_id)
+    return jsonify({"conversation": messages})
+
+
+@api_bp.delete("/history/<int:item_id>")
+def api_delete_history(item_id):
+    deleted = delete_history_item(item_id)
+    if deleted:
+        return jsonify({"deleted": True, "id": item_id}), 200
+    else:
+        return jsonify({"deleted": False, "id": item_id}), 404
+
+
+@api_bp.delete("/conversation/<conversation_id>")
+def api_delete_conversation(conversation_id):
+    deleted = delete_conversation(conversation_id)
+    if deleted:
+        return jsonify({"deleted": True, "conversation_id": conversation_id}), 200
+    else:
+        return jsonify({"deleted": False, "conversation_id": conversation_id}), 404
+
+
+def _llm_status():
+    return {
+        "provider": LLM_PROVIDER,
+        "model": GROQ_MODEL if LLM_PROVIDER == "groq" else None,
+        "groq_configured": bool(GROQ_API_KEY and GROQ_API_KEY != "your_groq_free_api_key_here"),
+    }

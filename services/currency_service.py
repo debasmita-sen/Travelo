@@ -10,12 +10,12 @@ USD_RATES = {
     "GBP": 0.79,
 }
 
-CURRENCY_SYMBOLS = {
+CURRENCY_LABELS = {
     "USD": "$",
-    "INR": "₹",
-    "EUR": "€",
-    "JPY": "¥",
-    "GBP": "£",
+    "INR": "Rs",
+    "EUR": "EUR",
+    "JPY": "JPY",
+    "GBP": "GBP",
 }
 
 DESTINATION_CURRENCIES = {
@@ -37,6 +37,8 @@ DESTINATION_CURRENCIES = {
     "united states": "USD",
 }
 
+CURRENCY_PATTERN = r"₹|rs\.?|inr|\$|usd|eur|€|gbp|£|jpy|¥"
+
 
 def destination_currency(destination: str) -> str:
     key = destination.strip().lower()
@@ -54,17 +56,7 @@ def parse_budget_text(text: str, destination: str, default_amount: float = 1200)
     if amount is None:
         amount = default_amount
         currency = "INR"
-
-    target_currency = destination_currency(destination)
-    budget_usd = convert_currency(amount, currency, "USD")
-    budget_local = convert_currency(amount, currency, target_currency)
-    return {
-        "amount": round(budget_usd, 2),
-        "input_amount": round(amount, 2),
-        "input_currency": currency,
-        "local_amount": round(budget_local, 2),
-        "local_currency": target_currency,
-    }
+    return build_budget_info(amount, currency, destination)
 
 
 def parse_budget_value(value, destination: str, default_currency: str = "INR") -> Dict:
@@ -72,30 +64,43 @@ def parse_budget_value(value, destination: str, default_currency: str = "INR") -
         amount = float(value)
     except (TypeError, ValueError):
         amount = 0
+    return build_budget_info(amount, default_currency, destination)
 
+
+def build_budget_info(amount: float, source_currency: str, destination: str) -> Dict:
     target_currency = destination_currency(destination)
-    budget_usd = convert_currency(amount, default_currency, "USD")
-    budget_local = convert_currency(amount, default_currency, target_currency)
+    budget_usd = convert_currency(amount, source_currency, "USD")
+    budget_local = convert_currency(amount, source_currency, target_currency)
     return {
         "amount": round(budget_usd, 2),
         "input_amount": round(amount, 2),
-        "input_currency": default_currency,
+        "input_currency": source_currency,
         "local_amount": round(budget_local, 2),
         "local_currency": target_currency,
     }
 
 
 def format_currency(amount: float, currency: str) -> str:
-    symbol = CURRENCY_SYMBOLS.get(currency, f"{currency} ")
     maximum_digits = 0 if currency in {"INR", "JPY"} else 2
     formatted = f"{amount:,.{maximum_digits}f}"
-    return f"{symbol}{formatted}"
+    label = CURRENCY_LABELS.get(currency, currency)
+    if currency == "USD":
+        return f"{label}{formatted}"
+    return f"{label} {formatted} {currency}"
+
+
+def format_conversion(input_amount: float, input_currency: str, local_amount: float, local_currency: str) -> str:
+    input_display = format_currency(input_amount, input_currency)
+    local_display = format_currency(local_amount, local_currency)
+    if input_currency == local_currency:
+        return input_display
+    return f"{input_display} ≈ {local_display}"
 
 
 def _find_budget_amount(text: str) -> tuple[Optional[float], str]:
     patterns = [
-        r"(?P<currency>₹|rs\.?|inr|\$|usd|eur|€|gbp|£|jpy|¥)\s*(?P<amount>\d+(?:,\d+)*(?:\.\d+)?)\s*(?P<suffix>k|lakh|lakhs|lac|lacs)?",
-        r"(?P<amount>\d+(?:,\d+)*(?:\.\d+)?)\s*(?P<suffix>k|lakh|lakhs|lac|lacs)?\s*(?P<currency>₹|rs\.?|inr|\$|usd|eur|€|gbp|£|jpy|¥)?",
+        rf"(?P<currency>{CURRENCY_PATTERN})\s*(?P<amount>\d+(?:,\d+)*(?:\.\d+)?)\s*(?P<suffix>k|lakh|lakhs|lac|lacs)?",
+        rf"(?P<amount>\d+(?:,\d+)*(?:\.\d+)?)\s*(?P<suffix>k|lakh|lakhs|lac|lacs)?\s*(?P<currency>{CURRENCY_PATTERN})?",
     ]
     candidates = []
     for pattern in patterns:

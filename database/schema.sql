@@ -16,3 +16,12 @@ CREATE TABLE IF NOT EXISTS plans (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (trip_id) REFERENCES trips(id)
 );
+
+CREATE TABLE IF NOT EXISTS chat_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);

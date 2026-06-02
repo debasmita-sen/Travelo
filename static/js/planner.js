@@ -1,7 +1,9 @@
 const state = {
   currentReport: null,
-  history: JSON.parse(localStorage.getItem("travelo_history") || "[]"),
+  currentConversationId: null,
+  history: [],
   theme: localStorage.getItem("travelo_theme") || "dark",
+  useTools: true,  // Toggle between tools and Groq-only
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -34,7 +36,19 @@ async function runIntro() {
 }
 
 function saveHistory() {
-  localStorage.setItem("travelo_history", JSON.stringify(state.history.slice(0, 12)));
+  renderHistory();
+}
+
+async function loadHistory() {
+  try {
+    const response = await fetch("/api/history");
+    if (!response.ok) throw new Error(`History failed with ${response.status}`);
+    const data = await response.json();
+    state.history = data.history || [];
+  } catch (error) {
+    state.history = [];
+  }
+  renderHistory();
 }
 
 function renderHistory() {
@@ -44,12 +58,23 @@ function renderHistory() {
     return;
   }
   state.history.forEach((item, index) => {
-    const button = document.createElement("button");
-    button.className = "history-item";
-    button.type = "button";
-    button.innerHTML = `<span>${escapeHtml(item.destination || "Trip")}</span><small>${escapeHtml(item.date || "Recent")}</small>`;
-    button.addEventListener("click", () => loadHistoryItem(index));
-    historyList.appendChild(button);
+    const row = document.createElement("div");
+    row.className = "history-row";
+    row.innerHTML = `
+      <button class="history-item" type="button">
+        <span>${escapeHtml(item.destination || "Trip")}</span>
+        <small>${escapeHtml(item.date || "Recent")}</small>
+      </button>
+      <button class="history-menu" type="button" aria-label="Delete chat" title="Delete chat">⋮</button>`;
+    
+    row.querySelector(".history-item").addEventListener("click", () => loadHistoryItem(index));
+    
+    // Attach menu handler using closure to capture item.conversation_id
+    row.querySelector(".history-menu").addEventListener("click", (event) => {
+      showDeleteMenu(event, item.conversation_id);
+    });
+    
+    historyList.appendChild(row);
   });
 }
 
@@ -67,18 +92,44 @@ function applyTheme(theme) {
   if (label) label.textContent = isDark ? "Light" : "Dark";
 }
 
-function loadHistoryItem(index) {
+async function loadHistoryItem(index) {
   const item = state.history[index];
   if (!item) return;
+  
   welcomeStage.classList.add("is-hidden");
   messages.innerHTML = "";
-  addUserMessage(item.message || `Plan a trip to ${item.destination || "your destination"}`);
-  if (item.type === "chat") {
-    addAssistantChat(item.answer, false);
-  } else {
-    addAssistantReport(item.report, false);
-    state.currentReport = item.report;
+  
+  // Set current conversation ID
+  state.currentConversationId = item.conversation_id;
+  
+  // Load all messages in this conversation
+  try {
+    const response = await fetch(`/api/conversation/${item.conversation_id}`);
+    if (!response.ok) throw new Error(`Failed to load conversation with ${response.status}`);
+    const data = await response.json();
+    const conversation = data.conversation || [];
+    
+    // Display all messages in order
+    conversation.forEach((msg) => {
+      addUserMessage(msg.message || `Plan a trip to ${msg.destination || "your destination"}`);
+      if (msg.type === "chat") {
+        addAssistantChat(msg.answer, false);
+      } else {
+        addAssistantReport(msg.report, false);
+        state.currentReport = msg.report;
+      }
+    });
+  } catch (error) {
+    // Fallback to single item display
+    addUserMessage(item.message || `Plan a trip to ${item.destination || "your destination"}`);
+    if (item.type === "chat") {
+      addAssistantChat(item.answer, false);
+    } else {
+      addAssistantReport(item.report, false);
+      state.currentReport = item.report;
+    }
   }
+  
   document.body.classList.remove("sidebar-open");
 }
 
@@ -94,16 +145,28 @@ function addLoadingMessage() {
   const card = document.createElement("article");
   card.className = "message assistant-message loading-card";
   card.id = "loadingCard";
-  card.innerHTML = `
-    <div class="assistant-icon"><img class="slow-spin" src="${logoPath}" alt=""></div>
-    <div class="report-card compact">
-      <div class="tool-loader"><span></span><span></span><span></span></div>
-      <h2>Travelo is using tools...</h2>
-      <p>Checking weather, news, routes, attractions, budget, crowds, and itinerary agents.</p>
-      <div class="tool-steps">
-        <span>Attractions</span><span>Budget</span><span>Weather</span><span>News</span><span>Routes</span><span>Crowds</span><span>Itinerary</span>
-      </div>
-    </div>`;
+  
+  if (state.useTools) {
+    card.innerHTML = `
+      <div class="assistant-icon"><img class="slow-spin" src="${logoPath}" alt=""></div>
+      <div class="report-card compact">
+        <div class="tool-loader"><span></span><span></span><span></span></div>
+        <h2>Travelo is using tools...</h2>
+        <p>Checking weather, news, routes, attractions, budget, crowds, and itinerary agents.</p>
+        <div class="tool-steps">
+          <span>Attractions</span><span>Budget</span><span>Weather</span><span>News</span><span>Routes</span><span>Crowds</span><span>Itinerary</span>
+        </div>
+      </div>`;
+  } else {
+    card.innerHTML = `
+      <div class="assistant-icon"><img class="slow-spin" src="${logoPath}" alt=""></div>
+      <div class="report-card compact">
+        <div class="tool-loader"><span></span><span></span><span></span></div>
+        <h2>Travelo Thinking...</h2>
+        <p>Processing your question.</p>
+      </div>`;
+  }
+  
   messages.appendChild(card);
   scrollToBottom();
 }
@@ -124,22 +187,21 @@ function addAssistantReport(plan, persist = true) {
       ${renderReport(report)}
     </div>`;
   messages.appendChild(card);
-  bindExportButton(card, report);
   if (persist) pushHistory(plan, report);
   scrollToBottom();
 }
 
-function addAssistantChat(answer, persist = true) {
+function addAssistantChat(answer, persist = true, plan = null) {
   const card = document.createElement("article");
   card.className = "message assistant-message";
   card.innerHTML = `
     <div class="assistant-icon"><img class="slow-spin" src="${logoPath}" alt=""></div>
     <div class="report-card compact">
       <h2>Travelo says</h2>
-      <ul>${toBullets(splitSummary(answer))}</ul>
+      <p style="line-height: 1.6; margin: 0; color: var(--text);">${escapeHtml(answer)}</p>
     </div>`;
   messages.appendChild(card);
-  if (persist) pushChatHistory(answer);
+  if (persist) pushChatHistory(answer, plan);
   scrollToBottom();
 }
 
@@ -163,8 +225,8 @@ function buildReport(plan) {
     meta: [
       `${trip.travelers || 1} traveler(s)`,
       `${trip.start_date || "Start date"} to ${trip.end_date || "End date"}`,
-      `Budget: ${budget.input_display || formatMoney(trip.budget || budget.total_budget || 0, budget.currency)}`,
-      `Destination currency: ${budget.local_display || formatMoney(budget.local_amount || 0, budget.local_currency)}`,
+      `Budget: ${budget.budget_display || budget.input_display || formatMoney(trip.budget || budget.total_budget || 0, budget.currency)}`,
+      `Estimate currency: ${budget.local_currency || budget.currency || "USD"}`,
       `Interests: ${trip.interests || "culture, food, landmarks"}`,
     ],
     budget,
@@ -187,7 +249,6 @@ function renderReport(report) {
         <h2>${escapeHtml(report.title)}</h2>
         <div class="meta-row">${report.meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>
       </div>
-      <button class="export-button" type="button">Export PDF</button>
     </div>
 
     <section class="report-section">
@@ -200,13 +261,12 @@ function renderReport(report) {
         <h3>Budget Snapshot</h3>
         <ul>
           <li>Status: <strong>${escapeHtml(report.budget.status || "review")}</strong></li>
-          <li>Your budget: <strong>${escapeHtml(report.budget.input_display || formatMoney(report.budget.total_budget || 0, report.budget.currency))}</strong></li>
-          <li>Destination value: <strong>${escapeHtml(report.budget.local_display || formatMoney(report.budget.local_amount || 0, report.budget.local_currency))}</strong></li>
+          <li>Your budget: <strong>${escapeHtml(report.budget.budget_display || report.budget.input_display || formatMoney(report.budget.total_budget || 0, report.budget.currency))}</strong></li>
           <li>Expected total: <strong>${escapeHtml(report.budget.local_expected_display || formatMoney(report.budget.expected_total || 0, report.budget.currency))}</strong></li>
-          <li>Lodging estimate: ${formatMoney(report.budget.lodging || 0, report.budget.currency)} base</li>
-          <li>Food estimate: ${formatMoney(report.budget.food || 0, report.budget.currency)} base</li>
-          <li>Transport estimate: ${formatMoney(report.budget.transport || 0, report.budget.currency)} base</li>
-          <li>Activities estimate: ${formatMoney(report.budget.activities || 0, report.budget.currency)} base</li>
+          <li>Lodging estimate: ${escapeHtml(report.budget.local_lodging_display || formatMoney(report.budget.lodging || 0, report.budget.currency))}</li>
+          <li>Food estimate: ${escapeHtml(report.budget.local_food_display || formatMoney(report.budget.food || 0, report.budget.currency))}</li>
+          <li>Transport estimate: ${escapeHtml(report.budget.local_transport_display || formatMoney(report.budget.transport || 0, report.budget.currency))}</li>
+          <li>Activities estimate: ${escapeHtml(report.budget.local_activities_display || formatMoney(report.budget.activities || 0, report.budget.currency))}</li>
           <li>Buffer: ${escapeHtml(report.budget.local_buffer_display || formatMoney(report.budget.buffer || 0, report.budget.currency))}</li>
           <li>${escapeHtml(report.budget.conversion_note || "Currency conversion is approximate.")}</li>
         </ul>
@@ -230,8 +290,8 @@ function renderReport(report) {
     <section class="report-section">
       <h3>Famous Food And Drinks</h3>
       <ul>${toBullets([
-        ...(report.food.foods || []).map((item) => `${item.name}: ${item.why_try || "A famous local food to try."}`),
-        ...(report.food.drinks || []).map((item) => `${item.name}: ${item.why_try || "A famous local drink to try."}`),
+        ...(report.food.foods || []).map((item) => formatFoodItem(item, "food")),
+        ...(report.food.drinks || []).map((item) => formatFoodItem(item, "drink")),
       ])}</ul>
     </section>
 
@@ -289,10 +349,10 @@ function exportReportPdf(report) {
     <h1>${escapeHtml(report.title)}</h1>
     <div class="meta">${report.meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>
     <h2>Executive Summary</h2><ul>${toBullets(splitSummary(report.summary))}</ul>
-    <h2>Budget Snapshot</h2><ul><li>Status: ${escapeHtml(report.budget.status || "review")}</li><li>Your budget: ${escapeHtml(report.budget.input_display || formatMoney(report.budget.total_budget || 0, report.budget.currency))}</li><li>Destination value: ${escapeHtml(report.budget.local_display || formatMoney(report.budget.local_amount || 0, report.budget.local_currency))}</li><li>Expected total: ${escapeHtml(report.budget.local_expected_display || formatMoney(report.budget.expected_total || 0, report.budget.currency))}</li><li>Buffer: ${escapeHtml(report.budget.local_buffer_display || formatMoney(report.budget.buffer || 0, report.budget.currency))}</li></ul>
+    <h2>Budget Snapshot</h2><ul><li>Status: ${escapeHtml(report.budget.status || "review")}</li><li>Your budget: ${escapeHtml(report.budget.budget_display || report.budget.input_display || formatMoney(report.budget.total_budget || 0, report.budget.currency))}</li><li>Expected total: ${escapeHtml(report.budget.local_expected_display || formatMoney(report.budget.expected_total || 0, report.budget.currency))}</li><li>Buffer: ${escapeHtml(report.budget.local_buffer_display || formatMoney(report.budget.buffer || 0, report.budget.currency))}</li></ul>
     <h2>Day-By-Day Itinerary</h2>${report.days.map((day) => `<div class="day"><h3>${escapeHtml(day.title || `Day ${day.day}`)}</h3><ul>${toBullets(day.activities || [])}</ul></div>`).join("")}
     <h2>Attractions</h2><ul>${toBullets(report.attractions.slice(0, 6).map((item) => `${item.name} - ${item.description || item.category || "attraction"}`))}</ul>
-    <h2>Famous Food And Drinks</h2><ul>${toBullets([...(report.food.foods || []), ...(report.food.drinks || [])].map((item) => `${item.name}: ${item.why_try || "Worth trying locally."}`))}</ul>
+    <h2>Famous Food And Drinks</h2><ul>${toBullets([...(report.food.foods || []), ...(report.food.drinks || [])].map((item) => formatFoodItem(item)))}</ul>
     <h2>Weather And Crowds</h2><ul>${toBullets(report.weather.map((item, index) => `${item.date}: ${item.condition}; crowd ${report.crowds[index]?.level || "moderate"}`))}</ul>
     <h2>News Scan</h2><ul>${toBullets(report.news.slice(0, 5).map((item) => `${item.title}: ${item.summary || "Review before departure."}`))}</ul>
     </body></html>`);
@@ -302,29 +362,153 @@ function exportReportPdf(report) {
 }
 
 function pushHistory(plan, report) {
-  state.history.unshift({
+  const item = {
+    id: plan.history_id,
+    conversation_id: plan.conversation_id,
     type: "travel_plan",
     destination: report.destination,
     date: new Date().toLocaleString(),
     message: plan.user_message,
-    report,
-  });
+    report: plan,
+  };
+  state.history = state.history.filter((historyItem) => historyItem.conversation_id !== item.conversation_id);
+  state.history.unshift(item);
   state.history = state.history.slice(0, 12);
   saveHistory();
-  renderHistory();
 }
 
-function pushChatHistory(answer) {
-  state.history.unshift({
+function pushChatHistory(answer, plan = null) {
+  const item = {
+    id: plan?.history_id,
+    conversation_id: plan?.conversation_id || state.currentConversationId,
     type: "chat",
     destination: "Chat",
     date: new Date().toLocaleString(),
-    message: $("#messageInput").dataset.lastMessage || "",
+    message: plan?.user_message || $("#messageInput").dataset.lastMessage || "",
     answer,
-  });
+  };
+  state.history = state.history.filter((historyItem) => historyItem.conversation_id !== item.conversation_id);
+  state.history.unshift(item);
   state.history = state.history.slice(0, 12);
   saveHistory();
-  renderHistory();
+}
+
+function showDeleteMenu(event, conversationId) {
+  event.stopPropagation();
+  
+  const triggerElement = event.currentTarget || event.target;
+  
+  // Remove any existing menus
+  const existingMenu = document.querySelector(".history-menu-popup");
+  if (existingMenu) existingMenu.remove();
+  
+  // Create menu
+  const menu = document.createElement("div");
+  menu.className = "history-menu-popup";
+  menu.innerHTML = `<button class="menu-delete-btn" type="button">Delete</button>`;
+  
+  document.body.appendChild(menu);
+  
+  // Position menu near the button
+  const rect = triggerElement.getBoundingClientRect();
+  menu.style.position = "fixed";
+  menu.style.top = (rect.bottom + 5) + "px";
+  menu.style.left = (rect.left - 50) + "px";
+  
+  // Delete button handler
+  menu.querySelector(".menu-delete-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    showDeleteConfirmation(conversationId, triggerElement);
+  });
+  
+  // Close menu when clicking outside
+  document.addEventListener("click", function closeMenu(e) {
+    if (!menu.contains(e.target) && e.target !== triggerElement) {
+      menu.remove();
+      document.removeEventListener("click", closeMenu);
+    }
+  });
+}
+
+function showDeleteConfirmation(conversationId, triggerElement) {
+  // Remove any existing popovers
+  const existingPopover = document.querySelector(".delete-popover");
+  if (existingPopover) existingPopover.remove();
+
+  const popover = document.createElement("div");
+  popover.className = "delete-popover";
+  popover.innerHTML = `
+    <p>Delete this chat?</p>
+    <div class="delete-popover-buttons">
+      <button class="delete-cancel-btn" type="button">Cancel</button>
+      <button class="delete-confirm-btn" type="button">Delete</button>
+    </div>
+  `;
+  
+  document.body.appendChild(popover);
+  
+  // Position popover relative to the triple dot triggerElement
+  const rect = triggerElement.getBoundingClientRect();
+  popover.style.position = "fixed";
+  popover.style.top = (rect.bottom + 6) + "px";
+  popover.style.left = (rect.right - 180) + "px";
+  
+  const cancelBtn = popover.querySelector(".delete-cancel-btn");
+  const confirmBtn = popover.querySelector(".delete-confirm-btn");
+  
+  const closePopover = () => {
+    popover.remove();
+  };
+  
+  cancelBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closePopover();
+  });
+  
+  confirmBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const response = await fetch(`/api/conversation/${conversationId}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`Delete failed: ${data.error || response.status}`);
+      }
+      if (data.deleted) {
+        state.history = state.history.filter((item) => item.conversation_id !== conversationId);
+        renderHistory();
+        
+        // Instant screen clear if we deleted the currently active conversation!
+        if (state.currentConversationId === conversationId) {
+          messages.innerHTML = "";
+          state.currentReport = null;
+          state.currentConversationId = null;
+          welcomeStage.classList.remove("is-hidden");
+          $("#welcomeText").textContent = "WELCOME TO TRAVELO";
+          $("#subheadingText").textContent = "make every trip awesome";
+          $(".hero-card h1 .caret").classList.add("is-done");
+          $(".subheading .caret").classList.add("is-done");
+        }
+        
+        closePopover();
+      } else {
+        throw new Error("Delete operation failed");
+      }
+    } catch (error) {
+      closePopover();
+      addErrorMessage(error.message);
+    }
+  });
+  
+  // Close popover when clicking outside
+  document.addEventListener("click", function clickOutside(e) {
+    if (!popover.contains(e.target) && e.target !== triggerElement) {
+      popover.remove();
+      document.removeEventListener("click", clickOutside);
+    }
+  });
 }
 
 async function submitChat(event) {
@@ -350,8 +534,11 @@ async function submitChat(event) {
     if (!response.ok) throw new Error(`Request failed with ${response.status}`);
     const plan = await response.json();
     removeLoadingMessage();
+    if (plan.conversation_id) {
+      state.currentConversationId = plan.conversation_id;
+    }
     if (plan.type === "chat") {
-      addAssistantChat(plan.answer || "I could not generate a response.");
+      addAssistantChat(plan.answer || "I could not generate a response.", true, plan);
     } else {
       addAssistantReport(plan);
     }
@@ -362,8 +549,9 @@ async function submitChat(event) {
 }
 
 function collectPayload(message) {
-  return {
+  const payload = {
     message,
+    use_tools: state.useTools,
     destination: $("#destinationInput").value.trim(),
     start_date: $("#startDateInput").value,
     end_date: $("#endDateInput").value,
@@ -371,6 +559,10 @@ function collectPayload(message) {
     budget: $("#budgetInput").value,
     interests: $("#interestsInput").value.trim(),
   };
+  if (state.currentConversationId) {
+    payload.conversation_id = state.currentConversationId;
+  }
+  return payload;
 }
 
 function addErrorMessage(text) {
@@ -387,6 +579,7 @@ function resizeTextarea(textarea) {
 
 function splitSummary(summary) {
   return String(summary || "")
+    .replaceAll("**", "")
     .split(/\n|\.\s+/)
     .map((item) => item.replace(/^[-*\s]+/, "").trim())
     .filter(Boolean)
@@ -396,16 +589,16 @@ function splitSummary(summary) {
 function toBullets(items) {
   const clean = (items || []).filter(Boolean);
   if (!clean.length) return "<li>Keep the plan flexible and confirm local details before departure.</li>";
-  return clean.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("");
+  return clean.map((item) => `<li>${escapeHtml(cleanText(item))}</li>`).join("");
 }
 
 function formatMoney(value, currency = "USD") {
   const amount = Number(value || 0);
-  const symbols = { USD: "$", INR: "₹", EUR: "€", JPY: "¥", GBP: "£" };
+  const symbols = { USD: "$", INR: "Rs ", EUR: "EUR ", JPY: "JPY ", GBP: "GBP " };
   const maximumFractionDigits = ["INR", "JPY"].includes(currency) ? 0 : 2;
   return amount
-    ? `${symbols[currency] || `${currency} `}${amount.toLocaleString(undefined, { maximumFractionDigits })}`
-    : `${symbols[currency] || `${currency} `}0`;
+    ? `${symbols[currency] || `${currency} `}${amount.toLocaleString(undefined, { maximumFractionDigits })}${currency === "USD" ? "" : ` ${currency}`}`
+    : `${symbols[currency] || `${currency} `}0${currency === "USD" ? "" : ` ${currency}`}`;
 }
 
 function formatActivityCost(day, currency = "USD") {
@@ -416,8 +609,20 @@ function formatActivityCost(day, currency = "USD") {
   return `${formatMoney(day.estimated_cost, currency)}${escapeHtml(note)}`;
 }
 
+function formatFoodItem(item, fallbackType = "specialty") {
+  const name = item.name || `Local ${fallbackType}`;
+  const why = item.why_try || "Worth trying locally.";
+  const where = item.where_to_try ? ` Try it at ${item.where_to_try}.` : "";
+  const tip = item.tip ? ` Tip: ${item.tip}` : "";
+  return `${name}: ${why}${where}${tip}`;
+}
+
+function cleanText(value) {
+  return String(value ?? "").replaceAll("**", "");
+}
+
 function escapeHtml(value) {
-  return String(value ?? "")
+  return cleanText(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -443,6 +648,7 @@ $("#messageInput").addEventListener("input", (event) => resizeTextarea(event.tar
 $("#newChatButton").addEventListener("click", () => {
   messages.innerHTML = "";
   state.currentReport = null;
+  state.currentConversationId = null;
   welcomeStage.classList.remove("is-hidden");
   $("#welcomeText").textContent = "WELCOME TO TRAVELO";
   $("#subheadingText").textContent = "make every trip awesome";
@@ -451,9 +657,101 @@ $("#newChatButton").addEventListener("click", () => {
 });
 $("#menuButton").addEventListener("click", () => document.body.classList.toggle("sidebar-open"));
 $("#themeToggle").addEventListener("click", () => applyTheme(state.theme === "dark" ? "light" : "dark"));
+$("#toolsToggle").addEventListener("click", (e) => {
+  state.useTools = !state.useTools;
+  const btn = e.target.closest("#toolsToggle");
+  btn.setAttribute("aria-pressed", String(state.useTools));
+  btn.style.opacity = state.useTools ? "1" : "0.5";
+});
+
+function exportConversationPdf() {
+  const messageElements = document.querySelectorAll("#messages .message");
+  if (!messageElements.length) {
+    alert("No messages to export.");
+    return;
+  }
+  
+  let htmlContent = "";
+  messageElements.forEach((msg) => {
+    if (msg.classList.contains("loading-card")) return;
+    
+    if (msg.classList.contains("user-message")) {
+      const bubble = msg.querySelector(".bubble");
+      if (bubble) {
+        htmlContent += `
+          <div class="message user">
+            <strong>You</strong>
+            <div>${bubble.innerHTML}</div>
+          </div>`;
+      }
+    } else if (msg.classList.contains("assistant-message")) {
+      const card = msg.querySelector(".report-card");
+      if (card) {
+        const clonedCard = card.cloneNode(true);
+        const btn = clonedCard.querySelector(".export-button");
+        if (btn) btn.remove();
+        
+        const isCompact = card.classList.contains("compact");
+        const title = isCompact ? "Travelo Chat" : "Travel Plan";
+        
+        htmlContent += `
+          <div class="message assistant">
+            <strong>${title}</strong>
+            <div class="report-card ${isCompact ? 'compact' : ''}">
+              ${clonedCard.innerHTML}
+            </div>
+          </div>`;
+      }
+    }
+  });
+
+  const popup = window.open("", "_blank", "width=920,height=1200");
+  if (!popup) return;
+  popup.document.write(`
+    <!doctype html><html><head><title>Travelo Chat Export</title>
+    <style>
+      body{font-family:Aptos,'Segoe UI',Arial,sans-serif;color:#172033;margin:40px;line-height:1.55}
+      h1{font-size:32px;margin:0 0 8px} 
+      h2{font-size:20px;margin-top:28px;border-bottom:1px solid #d9e2ef;padding-bottom:8px}
+      .brand{color:#246bfe;font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px}
+      .conversation{margin-top:30px}
+      .message{margin-bottom:30px;padding-bottom:20px;border-bottom:1.5px solid #e8edf5;break-inside:avoid}
+      .message.user{background:#f8fbff;border-left:4px solid #246bfe;padding:16px;border-radius:8px}
+      .message.user strong{display:block;color:#1e40af;font-size:12px;text-transform:uppercase;margin-bottom:8px;letter-spacing:0.05em}
+      .message.assistant strong{display:block;color:#0f766e;font-size:12px;text-transform:uppercase;margin-bottom:12px;letter-spacing:0.05em}
+      .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}
+      .meta-row span{display:inline-block;padding:6px 10px;border-radius:999px;background:#edf4ff;color:#315176;font-size:11px;font-weight:bold}
+      .report-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:15px 0}
+      .mini-panel, .report-section{border:1px solid #d9e2ef;border-radius:14px;padding:16px;margin:15px 0;background:#fafbfe}
+      .mini-panel h3, .report-section h3{margin-top:0;font-size:15px;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
+      .day-list{display:grid;gap:12px}
+      .day-card{border:1px solid #d9e2ef;border-radius:12px;padding:14px;background:#ffffff}
+      .day-card h4{margin:0 0 6px;font-size:14px}
+      .day-card p{font-size:12px;color:#64748b;margin:0 0 8px}
+      li{margin:7px 0}
+      ul{padding-left:20px}
+      .tool-audit{display:none}
+      @media print{button{display:none} body{margin:24px}}
+    </style></head><body>
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <p class="brand">Travelo</p>
+    <h1>Travelo Travel Itinerary & Chat History</h1>
+    <div class="conversation">
+      ${htmlContent}
+    </div>
+    </body></html>`);
+  popup.document.close();
+  popup.focus();
+  setTimeout(() => popup.print(), 350);
+}
+
+const exportChatBtn = $("#exportChatBtn");
+if (exportChatBtn) {
+  exportChatBtn.addEventListener("click", exportConversationPdf);
+}
 
 applyTheme(state.theme);
 setDefaultDates();
-renderHistory();
+loadHistory();
 runIntro();
 
