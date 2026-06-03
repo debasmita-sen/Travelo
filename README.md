@@ -355,6 +355,9 @@ Response: `trip`, `pipeline`, `context`, `manager_summary`.
 Full details: [docs/api_documentation.md](docs/api_documentation.md).
 
 ---
+<img width="1912" height="970" alt="Screenshot 2026-06-03 073335" src="https://github.com/user-attachments/assets/035effea-a548-4c58-b962-50bcc49599fe" />
+<img width="1919" height="967" alt="Screenshot 2026-06-03 073353" src="https://github.com/user-attachments/assets/85f7f702-bddc-496e-8af2-c6d03e7612c2" />
+
 
 ## Testing
 
