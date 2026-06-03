@@ -9,6 +9,7 @@ from config import GROQ_API_KEY, GROQ_MODEL, LLM_PROVIDER
 from models.trip import TripRequest
 from services.currency_service import parse_budget_text, parse_budget_value
 from services.history_service import delete_history_item, list_history, save_history_item, get_conversation, delete_conversation
+from services.sources_service import GROQ_CHAT_DISCLAIMER, collect_web_sources
 
 api_bp = Blueprint("api", __name__)
 
@@ -144,86 +145,123 @@ def api_plan():
     return jsonify(SmartTripOrchestrator().plan(trip))
 
 
+def _sources_from_conversation(conversation_history):
+    for item in reversed(conversation_history or []):
+        if item.get("type") != "travel_plan":
+            continue
+        report = item.get("report") or {}
+        context = report.get("context") or {}
+        if context:
+            destination = (report.get("trip") or {}).get("destination") or item.get("destination") or ""
+            return collect_web_sources(context, destination)
+        if report.get("sources"):
+            return report["sources"]
+    return []
+
+
 @api_bp.post("/chat")
 def api_chat():
-    payload = request.get_json(force=True)
-    message = payload.get("message", "")
-    conversation_id = payload.get("conversation_id")
-    use_tools = payload.get("use_tools", True)  # Default to True if not specified
-    
-    # If we are in an active conversation, just answer the question in context of history
-    if conversation_id:
-        conversation_history = get_conversation(conversation_id)
-        if conversation_history:
-            system = (
-                "You are Travelo, a helpful chat assistant. Answer the user's question directly. "
-                "Use clear, practical language. Answer the question asked in the context of the conversation "
-                "and previous travel plan if any. If the user asks about travel, food, drinks, culture, "
-                "or places, provide useful suggestions with enough detail to be useful: what it is, "
-                "why it matters, where to try it, and any safety or budget tip if relevant. "
-                "Do not use markdown bold formatting or double asterisks."
-            )
-            messages_list = [{"role": "system", "content": system}]
-            for item in conversation_history:
-                user_msg = item.get("message")
-                if user_msg:
-                    messages_list.append({"role": "user", "content": user_msg})
-                
-                if item.get("type") == "chat":
-                    assistant_msg = item.get("answer")
-                else:
-                    report = item.get("report") or {}
-                    assistant_msg = report.get("manager_summary") or f"Travel plan to {item.get('destination')} generated."
-                
-                if assistant_msg:
-                    messages_list.append({"role": "assistant", "content": assistant_msg})
-            
-            messages_list.append({"role": "user", "content": message})
-            
-            answer = GeneralChatAgent().llm.generate(messages_list, temperature=0.5)
-            if "not configured" in answer:
-                answer = "Groq is not configured right now, so I can only use the app's built-in travel tools and deterministic fallback reports."
-                
+    try:
+        payload = request.get_json(silent=True) or {}
+        message = (payload.get("message") or "").strip()
+        if not message:
+            return jsonify({"type": "error", "error": "Message is required."}), 400
+
+        conversation_id = payload.get("conversation_id")
+        use_tools = payload.get("use_tools", True)
+
+        if conversation_id:
+            conversation_history = get_conversation(conversation_id)
+            if conversation_history:
+                prior_sources = _sources_from_conversation(conversation_history)
+                system = (
+                    "You are Travelo, a helpful chat assistant. Answer the user's question directly. "
+                    "Use clear, practical language. Answer in the context of the conversation "
+                    "and any previous travel plan. Base factual claims on the prior plan and tool "
+                    "outputs when available; do not invent live weather, news URLs, or prices. "
+                    "If you lack verified data, say so briefly. "
+                    "Do not use markdown bold formatting or double asterisks."
+                )
+                if prior_sources:
+                    source_lines = "\n".join(
+                        f"- {item['label']}: {item['url']}"
+                        for item in prior_sources
+                        if item.get("url")
+                    )
+                    if source_lines:
+                        system += f"\nVerified reference links from the saved plan:\n{source_lines}"
+
+                messages_list = [{"role": "system", "content": system}]
+                for item in conversation_history:
+                    user_msg = item.get("message")
+                    if user_msg:
+                        messages_list.append({"role": "user", "content": user_msg})
+
+                    if item.get("type") == "chat":
+                        assistant_msg = item.get("answer")
+                    else:
+                        report = item.get("report") or {}
+                        assistant_msg = report.get("manager_summary") or f"Travel plan to {item.get('destination')} generated."
+
+                    if assistant_msg:
+                        messages_list.append({"role": "assistant", "content": assistant_msg})
+
+                messages_list.append({"role": "user", "content": message})
+
+                answer = GeneralChatAgent().llm.generate(messages_list, temperature=0.5)
+                if "not configured" in answer:
+                    answer = "Groq is not configured right now, so I can only use the app's built-in travel tools and deterministic fallback reports."
+
+                result = {
+                    "type": "chat",
+                    "answer": answer,
+                    "user_message": message,
+                    "llm_status": _llm_status(),
+                    "sources": prior_sources,
+                    "source_note": None if prior_sources else GROQ_CHAT_DISCLAIMER,
+                }
+                saved_item = save_history_item("chat", "Chat", message, {"answer": answer}, conversation_id)
+                result["history_id"] = saved_item["id"]
+                result["conversation_id"] = saved_item["conversation_id"]
+                return jsonify(result)
+
+        if not use_tools or not _should_use_trip_tools(payload):
+            answer = GeneralChatAgent().answer(message)
             result = {
                 "type": "chat",
                 "answer": answer,
                 "user_message": message,
                 "llm_status": _llm_status(),
+                "sources": [],
+                "source_note": GROQ_CHAT_DISCLAIMER,
             }
             saved_item = save_history_item("chat", "Chat", message, {"answer": answer}, conversation_id)
             result["history_id"] = saved_item["id"]
             result["conversation_id"] = saved_item["conversation_id"]
             return jsonify(result)
 
-    # If tools are disabled or conditions don't warrant tool use, use Groq-only
-    if not use_tools or not _should_use_trip_tools(payload):
-        answer = GeneralChatAgent().answer(message)
-        result = {
-            "type": "chat",
-            "answer": answer,
-            "user_message": message,
-            "llm_status": _llm_status(),
-        }
-        saved_item = save_history_item("chat", "Chat", message, {"answer": answer}, conversation_id)
+        trip = _extract_trip(payload)
+        result = SmartTripOrchestrator().plan(trip, user_message=message)
+        result["type"] = "travel_plan"
+        result["user_message"] = message
+        result["llm_status"] = _llm_status()
+        result.setdefault("sources", collect_web_sources(result.get("context") or {}, trip.destination))
+        saved_item = save_history_item(
+            "travel_plan",
+            result.get("trip", {}).get("destination") or trip.destination or "Trip",
+            message,
+            result,
+            conversation_id,
+        )
         result["history_id"] = saved_item["id"]
         result["conversation_id"] = saved_item["conversation_id"]
         return jsonify(result)
-
-    trip = _extract_trip(payload)
-    result = SmartTripOrchestrator().plan(trip, user_message=message)
-    result["type"] = "travel_plan"
-    result["user_message"] = message
-    result["llm_status"] = _llm_status()
-    saved_item = save_history_item(
-        "travel_plan",
-        result.get("trip", {}).get("destination") or trip.destination or "Trip",
-        message,
-        result,
-        conversation_id
-    )
-    result["history_id"] = saved_item["id"]
-    result["conversation_id"] = saved_item["conversation_id"]
-    return jsonify(result)
+    except Exception as exc:
+        return jsonify({
+            "type": "error",
+            "error": str(exc),
+            "answer": "Travelo could not complete that request. Check that the server is running and try again.",
+        }), 500
 
 
 @api_bp.get("/history")

@@ -1,11 +1,13 @@
 from services.gemini_service import GroqService
+from services.langchain_manager_service import LangChainManagerService
 
 
 class ManagerAgent:
-    """Groq-backed manager that turns tool results into a concise trip brief."""
+    """LangChain/Groq-backed manager that turns tool results into a trip brief."""
 
     def __init__(self):
         self.llm = GroqService()
+        self.langchain_manager = LangChainManagerService()
 
     def synthesize(self, trip, context):
         prompt_context = self._build_prompt_context(context)
@@ -17,18 +19,30 @@ class ManagerAgent:
             "travel plan summary, then a section named 'Side answer' that directly answers the "
             "extra question using your general travel knowledge and available context. "
             "Do not use markdown bold formatting or double asterisks. "
+            "Only state facts supported by verified_langchain_tool_results or orchestrator_context. "
+            "If data is missing or fallback, say so. Do not invent news headlines, URLs, or live readings. "
             "If the user asks about famous food, drinks, cuisine, markets, or what to try, "
             "answer that directly using the food context, including what it is, where to try it, "
             "and a practical tasting tip."
         )
         user = f"Original user message: {context.get('user_question', '')}\nTrip: {trip}\nSpecialist context: {prompt_context}"
-        content = self.llm.generate([
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ])
+        content = self.langchain_manager.generate_trip_brief(trip, context, system)
+        if self._should_fallback(content):
+            content = self.llm.generate([
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ])
         if "not configured" in content:
             content = self._local_summary(trip, context)
         return {"agent": "manager_agent", "manager_summary": content}
+
+    def _should_fallback(self, content):
+        fallback_markers = (
+            "LangChain manager failed:",
+            "LangChain packages not installed:",
+            "LangChain manager not configured.",
+        )
+        return any(marker in content for marker in fallback_markers)
 
     def _local_summary(self, trip, context):
         budget = context.get("budget", {})

@@ -12,6 +12,9 @@ dependencies = [
     "Flask==3.0.3",
     "python-dotenv==1.0.1",
     "requests==2.32.3",
+    "pydantic==2.13.4",
+    "langchain-core==0.3.65",
+    "langchain-groq==0.3.2",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +30,9 @@ dependencies = [
     "Flask==3.0.3",
     "python-dotenv==1.0.1",
     "requests==2.32.3",
+    "pydantic==2.13.4",
+    "langchain-core==0.3.65",
+    "langchain-groq==0.3.2",
     "pytest==8.3.2",
 ]
 

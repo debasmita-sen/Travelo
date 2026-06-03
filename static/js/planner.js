@@ -8,6 +8,40 @@ const state = {
 
 const $ = (selector) => document.querySelector(selector);
 const logoPath = "/static/images/travelo-logo.png";
+const API_ROOT = (document.body?.dataset?.apiRoot || window.location.origin || "").replace(/\/$/, "");
+
+function apiUrl(path) {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return API_ROOT ? `${API_ROOT}${normalized}` : normalized;
+}
+
+async function apiFetch(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(apiUrl(path), options);
+  } catch (error) {
+    const hint = API_ROOT
+      ? "Could not reach the Travelo server. Start it with: python app.py"
+      : "Could not reach the server. Open Travelo at http://127.0.0.1:5000/ (not Live Server or a file path).";
+    throw new Error(error?.message === "Failed to fetch" ? hint : error.message);
+  }
+  const raw = await response.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`Invalid server response (${response.status}). Is the Flask app running?`);
+    }
+  }
+  if (!response.ok) {
+    throw new Error(data.error || data.answer || `Request failed with ${response.status}`);
+  }
+  if (data.type === "error") {
+    throw new Error(data.error || data.answer || "Request failed.");
+  }
+  return data;
+}
 
 function syncToolsToggleUI() {
   const btn = $("#toolsToggle");
@@ -58,9 +92,7 @@ function saveHistory() {
 
 async function loadHistory() {
   try {
-    const response = await fetch("/api/history");
-    if (!response.ok) throw new Error(`History failed with ${response.status}`);
-    const data = await response.json();
+    const data = await apiFetch("/api/history");
     state.history = data.history || [];
   } catch (error) {
     state.history = [];
@@ -121,9 +153,7 @@ async function loadHistoryItem(index) {
   
   // Load all messages in this conversation
   try {
-    const response = await fetch(`/api/conversation/${item.conversation_id}`);
-    if (!response.ok) throw new Error(`Failed to load conversation with ${response.status}`);
-    const data = await response.json();
+    const data = await apiFetch(`/api/conversation/${item.conversation_id}`);
     const conversation = data.conversation || [];
     
     // Display all messages in order
@@ -204,6 +234,7 @@ function addAssistantReport(plan, persist = true) {
       ${renderReport(report)}
     </div>`;
   messages.appendChild(card);
+  bindExportButton(card.querySelector(".report-card"), report);
   if (persist) pushHistory(plan, report);
   scrollToBottom();
 }
@@ -216,6 +247,7 @@ function addAssistantChat(answer, persist = true, plan = null) {
     <div class="report-card compact">
       <h2>Travelo says</h2>
       <p style="line-height: 1.6; margin: 0; color: var(--text);">${escapeHtml(answer)}</p>
+      ${state.useTools ? renderSourcesBlock(plan?.sources, plan?.source_note) : ""}
     </div>`;
   messages.appendChild(card);
   if (persist) pushChatHistory(answer, plan);
@@ -255,6 +287,8 @@ function buildReport(plan) {
     food,
     days,
     tools: (plan.pipeline || []).map((step) => step.agent).filter(Boolean),
+    sources: plan.sources || [],
+    sourceNote: plan.source_note || "",
   };
 }
 
@@ -335,8 +369,14 @@ function renderReport(report) {
 
     <section class="report-section">
       <h3>Live News And Safety Scan</h3>
-      <ul>${toBullets(report.news.slice(0, 5).map((item) => `${item.title}: ${item.summary || "Review before departure."}`))}</ul>
+      <ul>${renderNewsBullets(report.news)}</ul>
     </section>
+
+    ${renderSourcesBlock(report.sources, report.sourceNote)}
+
+    <div class="report-actions">
+      <button class="export-button" type="button">Export report PDF</button>
+    </div>
 
     <section class="report-section tool-audit">
       <h3>Tools Used</h3>
@@ -345,23 +385,96 @@ function renderReport(report) {
 }
 
 function bindExportButton(root, report) {
-  const button = root.querySelector(".export-button");
+  const button = root?.querySelector(".export-button");
   if (button) button.addEventListener("click", () => exportReportPdf(report));
 }
 
+const PRINT_STYLES = `
+  body{font-family:Aptos,'Segoe UI',Arial,sans-serif;color:#172033;margin:40px;line-height:1.55}
+  h1{font-size:32px;margin:0 0 8px} h2{font-size:20px;margin-top:28px;border-bottom:1px solid #d9e2ef;padding-bottom:8px}
+  h3{font-size:16px;margin-top:18px}
+  .meta span{display:inline-block;margin:0 8px 8px 0;padding:6px 10px;border-radius:999px;background:#edf4ff;color:#315176}
+  li{margin:7px 0}.day{break-inside:avoid;border:1px solid #d9e2ef;border-radius:14px;padding:14px;margin:12px 0}
+  .brand{color:#246bfe;font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px}
+  .sources a{color:#1d4ed8;text-decoration:underline;word-break:break-word}
+  .sources-note{font-size:13px;color:#475569;margin:0 0 10px}
+  @media print{button{display:none} body{margin:24px}}
+`;
+
+function printHtmlDocument(title, bodyHtml, extraStyles = "") {
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("title", title);
+  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}${extraStyles}</style></head><body>${bodyHtml}</body></html>`);
+  doc.close();
+
+  const triggerPrint = () => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } finally {
+      setTimeout(() => iframe.remove(), 1500);
+    }
+  };
+
+  if (iframe.contentDocument?.readyState === "complete") {
+    setTimeout(triggerPrint, 100);
+  } else {
+    iframe.onload = () => setTimeout(triggerPrint, 100);
+  }
+}
+
+function renderSourcesBlock(sources, sourceNote) {
+  const items = sources || [];
+  if (!items.length) return "";
+  const list = items.length
+    ? `<ul class="sources-list">${items.map((item) => {
+        const label = escapeHtml(item.label || "Source");
+        const note = item.note ? ` <small>(${escapeHtml(item.note)})</small>` : "";
+        if (item.url) {
+          const href = escapeHtml(item.url);
+          return `<li><a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>${note}</li>`;
+        }
+        return `<li>${label}${note}</li>`;
+      }).join("")}</ul>`
+    : "";
+  const noteHtml = sourceNote
+    ? `<p class="sources-note">${escapeHtml(sourceNote)}</p>`
+    : "";
+  return `
+    <section class="report-section sources-section">
+      <h3>Sources and references</h3>
+      ${noteHtml}
+      ${list}
+    </section>`;
+}
+
+function renderSourcesPrintHtml(sources, sourceNote) {
+  const block = renderSourcesBlock(sources, sourceNote);
+  return block.replaceAll('target="_blank"', "").replaceAll('rel="noopener noreferrer"', "");
+}
+
+function renderNewsBullets(news) {
+  const items = (news || []).slice(0, 5);
+  if (!items.length) return toBullets([]);
+  return items.map((item) => {
+    const summary = escapeHtml(item.summary || "Review before departure.");
+    const title = escapeHtml(item.title || "News");
+    if (item.url) {
+      const href = escapeHtml(item.url);
+      return `<li><a href="${href}" target="_blank" rel="noopener noreferrer">${title}</a>: ${summary}</li>`;
+    }
+    return `<li>${title}: ${summary}</li>`;
+  }).join("");
+}
+
 function exportReportPdf(report) {
-  const popup = window.open("", "_blank", "width=920,height=1200");
-  if (!popup) return;
-  popup.document.write(`
-    <!doctype html><html><head><title>${escapeHtml(report.title)}</title>
-    <style>
-      body{font-family:Aptos,'Segoe UI',Arial,sans-serif;color:#172033;margin:40px;line-height:1.55}
-      h1{font-size:32px;margin:0 0 8px} h2{font-size:20px;margin-top:28px;border-bottom:1px solid #d9e2ef;padding-bottom:8px}
-      .meta span{display:inline-block;margin:0 8px 8px 0;padding:6px 10px;border-radius:999px;background:#edf4ff;color:#315176}
-      li{margin:7px 0}.day{break-inside:avoid;border:1px solid #d9e2ef;border-radius:14px;padding:14px;margin:12px 0}.brand{color:#246bfe;font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px}
-      @media print{button{display:none} body{margin:24px}}
-    </style></head><body>
-    <button onclick="window.print()">Print / Save as PDF</button>
+  const bodyHtml = `
+    <button type="button" onclick="window.print()">Print / Save as PDF</button>
     <p class="brand">Travelo</p>
     <h1>${escapeHtml(report.title)}</h1>
     <div class="meta">${report.meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>
@@ -371,11 +484,9 @@ function exportReportPdf(report) {
     <h2>Attractions</h2><ul>${toBullets(report.attractions.slice(0, 6).map((item) => `${item.name} - ${item.description || item.category || "attraction"}`))}</ul>
     <h2>Famous Food And Drinks</h2><ul>${toBullets([...(report.food.foods || []), ...(report.food.drinks || [])].map((item) => formatFoodItem(item)))}</ul>
     <h2>Weather And Crowds</h2><ul>${toBullets(report.weather.map((item, index) => `${item.date}: ${item.condition}; crowd ${report.crowds[index]?.level || "moderate"}`))}</ul>
-    <h2>News Scan</h2><ul>${toBullets(report.news.slice(0, 5).map((item) => `${item.title}: ${item.summary || "Review before departure."}`))}</ul>
-    </body></html>`);
-  popup.document.close();
-  popup.focus();
-  setTimeout(() => popup.print(), 350);
+    <h2>News Scan</h2><ul>${renderNewsBullets(report.news)}</ul>
+    ${renderSourcesPrintHtml(report.sources, report.sourceNote)}`;
+  printHtmlDocument(report.title, bodyHtml);
 }
 
 function pushHistory(plan, report) {
@@ -488,11 +599,7 @@ function showDeleteConfirmation(conversationId, triggerElement) {
     e.preventDefault();
     e.stopPropagation();
     try {
-      const response = await fetch(`/api/conversation/${conversationId}`, { method: "DELETE" });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(`Delete failed: ${data.error || response.status}`);
-      }
+      const data = await apiFetch(`/api/conversation/${conversationId}`, { method: "DELETE" });
       if (data.deleted) {
         state.history = state.history.filter((item) => item.conversation_id !== conversationId);
         renderHistory();
@@ -543,13 +650,11 @@ async function submitChat(event) {
 
   const payload = collectPayload(message);
   try {
-    const response = await fetch("/api/chat", {
+    const plan = await apiFetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error(`Request failed with ${response.status}`);
-    const plan = await response.json();
     removeLoadingMessage();
     if (plan.conversation_id) {
       state.currentConversationId = plan.conversation_id;
@@ -720,44 +825,31 @@ function exportConversationPdf() {
     }
   });
 
-  const popup = window.open("", "_blank", "width=920,height=1200");
-  if (!popup) return;
-  popup.document.write(`
-    <!doctype html><html><head><title>Travelo Chat Export</title>
-    <style>
-      body{font-family:Aptos,'Segoe UI',Arial,sans-serif;color:#172033;margin:40px;line-height:1.55}
-      h1{font-size:32px;margin:0 0 8px} 
-      h2{font-size:20px;margin-top:28px;border-bottom:1px solid #d9e2ef;padding-bottom:8px}
-      .brand{color:#246bfe;font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:12px}
-      .conversation{margin-top:30px}
-      .message{margin-bottom:30px;padding-bottom:20px;border-bottom:1.5px solid #e8edf5;break-inside:avoid}
-      .message.user{background:#f8fbff;border-left:4px solid #246bfe;padding:16px;border-radius:8px}
-      .message.user strong{display:block;color:#1e40af;font-size:12px;text-transform:uppercase;margin-bottom:8px;letter-spacing:0.05em}
-      .message.assistant strong{display:block;color:#0f766e;font-size:12px;text-transform:uppercase;margin-bottom:12px;letter-spacing:0.05em}
-      .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}
-      .meta-row span{display:inline-block;padding:6px 10px;border-radius:999px;background:#edf4ff;color:#315176;font-size:11px;font-weight:bold}
-      .report-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:15px 0}
-      .mini-panel, .report-section{border:1px solid #d9e2ef;border-radius:14px;padding:16px;margin:15px 0;background:#fafbfe}
-      .mini-panel h3, .report-section h3{margin-top:0;font-size:15px;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
-      .day-list{display:grid;gap:12px}
-      .day-card{border:1px solid #d9e2ef;border-radius:12px;padding:14px;background:#ffffff}
-      .day-card h4{margin:0 0 6px;font-size:14px}
-      .day-card p{font-size:12px;color:#64748b;margin:0 0 8px}
-      li{margin:7px 0}
-      ul{padding-left:20px}
-      .tool-audit{display:none}
-      @media print{button{display:none} body{margin:24px}}
-    </style></head><body>
-    <button onclick="window.print()">Print / Save as PDF</button>
+  const exportStyles = `
+    .conversation{margin-top:30px}
+    .message{margin-bottom:30px;padding-bottom:20px;border-bottom:1.5px solid #e8edf5;break-inside:avoid}
+    .message.user{background:#f8fbff;border-left:4px solid #246bfe;padding:16px;border-radius:8px}
+    .message.user strong{display:block;color:#1e40af;font-size:12px;text-transform:uppercase;margin-bottom:8px;letter-spacing:0.05em}
+    .message.assistant strong{display:block;color:#0f766e;font-size:12px;text-transform:uppercase;margin-bottom:12px;letter-spacing:0.05em}
+    .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}
+    .meta-row span{display:inline-block;padding:6px 10px;border-radius:999px;background:#edf4ff;color:#315176;font-size:11px;font-weight:bold}
+    .report-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:15px 0}
+    .mini-panel, .report-section{border:1px solid #d9e2ef;border-radius:14px;padding:16px;margin:15px 0;background:#fafbfe}
+    .mini-panel h3, .report-section h3{margin-top:0;font-size:15px;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:6px}
+    .day-list{display:grid;gap:12px}
+    .day-card{border:1px solid #d9e2ef;border-radius:12px;padding:14px;background:#ffffff}
+    .day-card h4{margin:0 0 6px;font-size:14px}
+    .day-card p{font-size:12px;color:#64748b;margin:0 0 8px}
+    ul{padding-left:20px}
+    .tool-audit,.report-actions{display:none}
+    a{color:#1d4ed8;text-decoration:underline}
+  `;
+  const bodyHtml = `
+    <button type="button" onclick="window.print()">Print / Save as PDF</button>
     <p class="brand">Travelo</p>
-    <h1>Travelo Travel Itinerary & Chat History</h1>
-    <div class="conversation">
-      ${htmlContent}
-    </div>
-    </body></html>`);
-  popup.document.close();
-  popup.focus();
-  setTimeout(() => popup.print(), 350);
+    <h1>Travelo Travel Itinerary &amp; Chat History</h1>
+    <div class="conversation">${htmlContent}</div>`;
+  printHtmlDocument("Travelo Chat Export", bodyHtml, exportStyles);
 }
 
 const exportChatBtn = $("#exportChatBtn");

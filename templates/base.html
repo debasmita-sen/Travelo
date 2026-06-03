@@ -8,7 +8,7 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='assets/travelo-icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body data-api-root="{{ request.url_root.rstrip('/') if request else '' }}">
   {% block content %}{% endblock %}
   {% block scripts %}{% endblock %}
 </body>

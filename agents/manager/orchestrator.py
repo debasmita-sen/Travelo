@@ -8,6 +8,7 @@ from agents.news.news_agent import NewsAgent
 from agents.route.route_agent import RouteAgent
 from agents.weather.weather_agent import WeatherAgent
 from models.trip import TripRequest
+from services.sources_service import collect_web_sources
 
 
 class SmartTripOrchestrator:
@@ -46,9 +47,11 @@ class SmartTripOrchestrator:
         itinerary_result = self.itinerary_agent.run(trip, context)
         context["itinerary"] = itinerary_result["itinerary"]
         manager_result = self.manager_agent.synthesize(trip, context)
+        sources = collect_web_sources(context, trip.destination)
 
         return {
             "trip": trip.__dict__,
+            "sources": sources,
             "pipeline": [
                 attraction_result,
                 budget_result,

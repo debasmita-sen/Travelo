@@ -49,10 +49,14 @@ class LLMService:
         )
         try:
             response.raise_for_status()
-        except requests.HTTPError as exc:
+        except requests.HTTPError:
             if response.status_code == 413:
                 return "The travel context was too large for the LLM provider, so SmartTripAI used the structured local plan instead."
-            raise exc
+            try:
+                detail = response.json().get("error", {}).get("message", response.text[:200])
+            except (ValueError, AttributeError, KeyError):
+                detail = response.text[:200] if response.text else "unknown error"
+            return f"Groq request failed ({response.status_code}): {detail}"
         data = response.json()
         return data["choices"][0]["message"]["content"]
 
@@ -73,10 +77,10 @@ class LLMService:
         )
         try:
             response.raise_for_status()
-        except requests.HTTPError as exc:
+        except requests.HTTPError:
             if response.status_code == 413:
                 return "The travel context was too large for the LLM provider, so SmartTripAI used the structured local plan instead."
-            raise exc
+            return f"Gemini request failed ({response.status_code}). Using deterministic local planning output."
         data = response.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
 

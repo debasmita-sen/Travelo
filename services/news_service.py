@@ -31,7 +31,7 @@ def get_travel_news(destination: str) -> List[Dict]:
             NEWSDATA_API_URL,
             params={
                 "apikey": NEWSDATA_API_KEY,
-                "q": f"{destination} travel tourism transport weather",
+                "q": destination,
                 "language": "en",
                 "size": 5,
             },

@@ -665,6 +665,25 @@ body[data-theme="dark"] .meta-row span {
   background: #111111;
   color: #bfdbfe;
 }
+.report-actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+}
+.sources-section a {
+  color: var(--blue);
+  text-decoration: underline;
+  word-break: break-word;
+}
+.sources-section .sources-note {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+body[data-theme="dark"] .sources-section .sources-note {
+  color: #94a3b8;
+}
 .export-button {
   flex: 0 0 auto;
   border: 0;
