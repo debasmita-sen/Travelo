@@ -249,6 +249,21 @@ hatch env create
 
 You can still use `pip install -r requirements.txt` inside `.venv` if you prefer; `requirements.txt` is kept in sync for compatibility.
 
+### Troubleshooting Hatch
+
+If `hatch shell` or `hatch env create` fails with **maturin / Rust** errors, the cause is usually an old `pydantic` pin being built from source on **Python 3.14** (no wheel yet). This project avoids that by:
+
+- `skip-install = true` — Hatch installs dependencies only, not the repo as a wheel
+- No `pydantic` dependency (it was unused in the app)
+- `PYTHONPATH = "{root}"` so `agents`, `routes`, and `tools` import correctly without a package install
+
+To reset a broken env:
+
+```powershell
+Remove-Item -Recurse -Force .venv
+hatch env create
+```
+
 ### Where Hatch stores things
 
 - **Project env:** `.venv/` (gitignored) — local to this folder.

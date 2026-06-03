@@ -12,7 +12,6 @@ dependencies = [
     "Flask==3.0.3",
     "python-dotenv==1.0.1",
     "requests==2.32.3",
-    "pydantic==2.8.2",
 ]
 
 [project.optional-dependencies]
@@ -21,17 +20,19 @@ dev = ["pytest==8.3.2"]
 [tool.hatch.envs.default]
 type = "virtual"
 path = ".venv"
+# Flask app — deps only; do not pip-install this repo as a wheel
+skip-install = true
+dev-mode = false
 dependencies = [
     "Flask==3.0.3",
     "python-dotenv==1.0.1",
     "requests==2.32.3",
-    "pydantic==2.8.2",
     "pytest==8.3.2",
 ]
+
+[tool.hatch.envs.default.env-vars]
+PYTHONPATH = "{root}"
 
 [tool.hatch.envs.default.scripts]
 app = "python app.py"
 test = "pytest {args:tests}"
-
-[tool.hatch.build.targets.wheel]
-packages = ["agents", "routes", "services", "tools", "models"]
