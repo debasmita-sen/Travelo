@@ -8,6 +8,23 @@ const state = {
 
 const $ = (selector) => document.querySelector(selector);
 const logoPath = "/static/images/travelo-logo.png";
+
+function syncToolsToggleUI() {
+  const btn = $("#toolsToggle");
+  if (!btn) return;
+  const on = state.useTools;
+  btn.setAttribute("aria-pressed", on ? "true" : "false");
+  btn.title = on ? "Use tools for planning" : "Groq-only chat (no specialist tools)";
+  btn.setAttribute("aria-label", on ? "Tools on — click to turn off" : "Tools off — click to turn on");
+  const label = btn.querySelector(".tools-status-text");
+  if (label) label.textContent = on ? "Tools On" : "Tools Off";
+  const hint = document.querySelector(".composer-hint");
+  if (hint) {
+    hint.textContent = on
+      ? "Travelo will use specialist tools, then generate a detailed bullet travel report."
+      : "Travelo will answer with Groq only — no weather, routes, or itinerary tools.";
+  }
+}
 const messages = $("#messages");
 const historyList = $("#historyList");
 const welcomeStage = $("#welcomeStage");
@@ -657,11 +674,9 @@ $("#newChatButton").addEventListener("click", () => {
 });
 $("#menuButton").addEventListener("click", () => document.body.classList.toggle("sidebar-open"));
 $("#themeToggle").addEventListener("click", () => applyTheme(state.theme === "dark" ? "light" : "dark"));
-$("#toolsToggle").addEventListener("click", (e) => {
+$("#toolsToggle").addEventListener("click", () => {
   state.useTools = !state.useTools;
-  const btn = e.target.closest("#toolsToggle");
-  btn.setAttribute("aria-pressed", String(state.useTools));
-  btn.style.opacity = state.useTools ? "1" : "0.5";
+  syncToolsToggleUI();
 });
 
 function exportConversationPdf() {
@@ -751,6 +766,7 @@ if (exportChatBtn) {
 }
 
 applyTheme(state.theme);
+syncToolsToggleUI();
 setDefaultDates();
 loadHistory();
 runIntro();

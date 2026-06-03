@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "travelo"
+version = "1.0.0"
+description = "Agentic travel planning with specialist agents and live data providers"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "Flask==3.0.3",
+    "python-dotenv==1.0.1",
+    "requests==2.32.3",
+    "pydantic==2.8.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==8.3.2"]
+
+[tool.hatch.envs.default]
+type = "virtual"
+path = ".venv"
+dependencies = [
+    "Flask==3.0.3",
+    "python-dotenv==1.0.1",
+    "requests==2.32.3",
+    "pydantic==2.8.2",
+    "pytest==8.3.2",
+]
+
+[tool.hatch.envs.default.scripts]
+app = "python app.py"
+test = "pytest {args:tests}"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agents", "routes", "services", "tools", "models"]

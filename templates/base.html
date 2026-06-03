@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Travelo</title>
+  <title>{% block title %}Travelo{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='assets/travelo-icon.png') }}" sizes="32x32">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='assets/travelo-icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
