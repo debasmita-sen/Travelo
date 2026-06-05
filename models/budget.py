@@ -1,11 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass  # simple container for budget parts
 
 
 @dataclass
-class BudgetBreakdown:
-    total_budget: float
-    lodging: float
-    food: float
-    transport: float
-    activities: float
-    buffer: float
+class BudgetBreakdown:  # breakdown of a trip budget into categories
+    total_budget: float  # total amount available
+    lodging: float  # estimated lodging cost
+    food: float  # estimated food cost
+    transport: float  # estimated transport cost
+    activities: float  # estimated activities cost
+    buffer: float  # leftover or buffer amount

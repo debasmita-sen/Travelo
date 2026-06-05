@@ -30,6 +30,7 @@ def _fallback_route(origin: str, destination: str, reason: str) -> Dict:
 
 
 def plan_route(origin: str, destination: str) -> Dict:
+    # If API key missing, return local guidance fallback
     if not OPENROUTESERVICE_API_KEY or OPENROUTESERVICE_API_KEY == "your_openrouteservice_key_here":
         return _fallback_route(origin, destination, "OPENROUTESERVICE_API_KEY is not configured")
 
@@ -64,4 +65,5 @@ def plan_route(origin: str, destination: str) -> Dict:
             "notes": ["Live route estimate from OpenRouteService."]
         }
     except (requests.RequestException, KeyError, IndexError, TypeError):
+        # Network or parsing error -> return graceful fallback guidance
         return _fallback_route(origin, destination, "OpenRouteService request failed")

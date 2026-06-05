@@ -84,6 +84,10 @@ def geocode_destination(destination: str) -> Optional[Tuple[float, float]]:
     if key in LOCAL_COORDS:
         return LOCAL_COORDS[key]
 
+    """Resolve a free-text destination into (lat, lon) using Nominatim.
+
+    Returns None when the destination cannot be geocoded or on errors.
+    """
     try:
         keyed_result = _geocode_with_keyed_provider(destination)
         if keyed_result:

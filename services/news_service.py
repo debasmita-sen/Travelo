@@ -23,6 +23,7 @@ def _fallback_news(destination: str, reason: str) -> List[Dict]:
 
 
 def get_travel_news(destination: str) -> List[Dict]:
+    # If API key missing, return safe local fallback
     if not NEWSDATA_API_KEY or NEWSDATA_API_KEY == "your_newsdata_key_here":
         return _fallback_news(destination, "NEWSDATA_API_KEY is not configured")
 
@@ -40,6 +41,7 @@ def get_travel_news(destination: str) -> List[Dict]:
         response.raise_for_status()
         payload = response.json()
         if payload.get("status") == "error":
+            # NewsData API reported an error; fall back
             return _fallback_news(destination, payload.get("results", {}).get("message", "NewsData.io returned an error"))
         articles = [
             {
@@ -54,4 +56,5 @@ def get_travel_news(destination: str) -> List[Dict]:
         ]
         return articles or _fallback_news(destination, "no articles returned")
     except (requests.RequestException, TypeError, ValueError):
+        # Network or parsing error -> fallback
         return _fallback_news(destination, "NewsData.io request failed")

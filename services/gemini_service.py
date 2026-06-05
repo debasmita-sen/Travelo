@@ -1,6 +1,6 @@
-from typing import Dict, List
+from typing import Dict, List  # typing helpers
 
-import requests
+import requests  # HTTP client for LLM APIs
 
 from config import (
     GEMINI_API_KEY,
@@ -18,12 +18,12 @@ class LLMService:
     """Shared LLM adapter for the manager and itinerary agents."""
 
     def generate(self, messages: List[Dict[str, str]], temperature: float = 0.3) -> str:
-        messages = self._fit_messages(messages)
+        messages = self._fit_messages(messages)  # trim messages to LLM size limits
         if LLM_PROVIDER == "gemini":
             return self._generate_with_gemini(messages, temperature)
         return self._generate_with_groq(messages, temperature)
 
-    def _fit_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    def _fit_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:  # ensure payload fits char limits
         fitted = []
         remaining_chars = MAX_LLM_MESSAGE_CHARS
         for message in messages:

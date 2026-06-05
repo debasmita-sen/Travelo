@@ -44,6 +44,7 @@ def _weather_tip(condition: str) -> str:
 
 
 def forecast_weather(destination: str, start_date: str, days: int) -> List[Dict]:
+    # If API key missing, return generated fallback weather
     if not WEATHER_API_KEY or WEATHER_API_KEY == "your_weatherapi_key_here":
         return _fallback_weather(destination, start_date, days, "WEATHER_API_KEY is not configured")
 
@@ -71,6 +72,8 @@ def forecast_weather(destination: str, start_date: str, days: int) -> List[Dict]
             "tip": _weather_tip(condition),
             "source": "weatherapi_current",
         }
+        # Duplicate the live day to fill the requested number of days, adjusting dates
         return [dict(live_day, date=(date.today() + timedelta(days=index)).isoformat()) for index in range(days)]
     except (requests.RequestException, KeyError, TypeError, ValueError):
+        # On any failure, return plausible local fallback forecasts
         return _fallback_weather(destination, start_date, days, "WeatherAPI request failed")

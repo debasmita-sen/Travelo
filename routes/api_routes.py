@@ -1,27 +1,27 @@
-from datetime import date, timedelta
-import re
+from datetime import date, timedelta  # date helpers
+import re  # regex use for parsing
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request  # flask web helpers
 
-from agents.general_chat_agent import GeneralChatAgent
-from agents.manager.orchestrator import SmartTripOrchestrator
-from config import GROQ_API_KEY, GROQ_MODEL, LLM_PROVIDER
-from models.trip import TripRequest
-from services.currency_service import parse_budget_text, parse_budget_value
-from services.history_service import delete_history_item, list_history, save_history_item, get_conversation, delete_conversation
-from services.sources_service import GROQ_CHAT_DISCLAIMER, collect_web_sources
+from agents.general_chat_agent import GeneralChatAgent  # fallback chat agent
+from agents.manager.orchestrator import SmartTripOrchestrator  # main orchestrator
+from config import GROQ_API_KEY, GROQ_MODEL, LLM_PROVIDER  # LLM config flags
+from models.trip import TripRequest  # trip data class
+from services.currency_service import parse_budget_text, parse_budget_value  # budget parsing helpers
+from services.history_service import delete_history_item, list_history, save_history_item, get_conversation, delete_conversation  # history helpers
+from services.sources_service import GROQ_CHAT_DISCLAIMER, collect_web_sources  # source collection utilities
 
-api_bp = Blueprint("api", __name__)
+api_bp = Blueprint("api", __name__)  # blueprint for API endpoints
 
 
-def _safe_int(value, default):
+def _safe_int(value, default):  # safely convert to int with fallback
     try:
         return int(value)
     except (TypeError, ValueError):
         return default
 
 
-def _safe_float(value, default):
+def _safe_float(value, default):  # safely convert to float with fallback
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -52,7 +52,7 @@ def _trip_from_fields(
     )
 
 
-def _extract_destination(message: str) -> str:
+def _extract_destination(message: str) -> str:  # try several patterns to find a place name in free text
     patterns = [
         r"(?:famous|popular|best|local|traditional)?\s*(?:foods?|drinks?|cuisine|dishes?)\s+(?:in|of|from)\s+([A-Za-z\s,]+?)(?:\s+for|\s+on|\s+with|\?|\.|$)",
         r"(?:trip|travel|itinerary|plan|visit)\s+(?:to|for)\s+([A-Za-z\s,]+?)(?:\s+from|\s+for|\s+on|\s+with|\s+under|\s+budget|\.|$)",
@@ -64,10 +64,10 @@ def _extract_destination(message: str) -> str:
         match = re.search(pattern, message, re.IGNORECASE)
         if match:
             return match.group(1).strip(" ,.")
-    return "Paris"
+    return "Paris"  # default fallback
 
 
-def _extract_trip(payload):
+def _extract_trip(payload):  # build a TripRequest from request payload and message text
     message = payload.get("message", "")
     today = date.today()
     default_start = today + timedelta(days=30)
@@ -89,7 +89,8 @@ def _extract_trip(payload):
     if budget_match and not payload.get("budget"):
         budget_info = parse_budget_text(message, destination)
 
-    interest_match = re.search(r"(?:interests?|likes?|focus(?:ed)? on)\s*:?\s*([A-Za-z,\s]+)", message, re.IGNORECASE)
+    interest_match = re.search(r"(?:interests?|likes?|focus(?:ed)? on)\s*:?
+\s*([A-Za-z,\s]+)", message, re.IGNORECASE)
     if interest_match and not payload.get("interests"):
         interests = interest_match.group(1).strip(" .")
 
@@ -100,7 +101,7 @@ def _extract_trip(payload):
     return _trip_from_fields(destination, start_date, end_date, travelers, budget_info, interests, origin)
 
 
-def _should_use_trip_tools(payload) -> bool:
+def _should_use_trip_tools(payload) -> bool:  # heuristics to choose whether to use travel tools
     message = payload.get("message", "")
     if any(payload.get(key) for key in ("destination", "interests", "origin")):
         return True
@@ -129,7 +130,7 @@ def _should_use_trip_tools(payload) -> bool:
 
 
 @api_bp.post("/plan")
-def api_plan():
+def api_plan():  # endpoint to create a plan from JSON payload
     payload = request.get_json(force=True)
     destination = payload.get("destination", "")
     budget_info = parse_budget_value(payload.get("budget"), destination)
@@ -145,7 +146,7 @@ def api_plan():
     return jsonify(SmartTripOrchestrator().plan(trip))
 
 
-def _sources_from_conversation(conversation_history):
+def _sources_from_conversation(conversation_history):  # extract saved web sources from prior travel plan
     for item in reversed(conversation_history or []):
         if item.get("type") != "travel_plan":
             continue
@@ -160,7 +161,7 @@ def _sources_from_conversation(conversation_history):
 
 
 @api_bp.post("/chat")
-def api_chat():
+def api_chat():  # main chat endpoint that routes between LLM chat and travel planning
     try:
         payload = request.get_json(silent=True) or {}
         message = (payload.get("message") or "").strip()

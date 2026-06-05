@@ -1,3 +1,9 @@
+"""Tests for thin tool wrappers that the orchestrator and agents use.
+
+These ensure that the project tools return shaped outputs (budget status,
+attractions list) suitable for downstream assembly into itineraries.
+"""
+
 from tools.budget_tools import calculate_budget
 from tools.attraction_tools import search_attractions
 

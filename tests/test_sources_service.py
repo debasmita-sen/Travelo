@@ -1,3 +1,9 @@
+"""Tests for building web source citations from tool outputs.
+
+Verifies that `collect_web_sources` produces reasonable link lists for
+weather, news, routes, and OpenStreetMap attractions.
+"""
+
 from services.sources_service import collect_web_sources
 
 

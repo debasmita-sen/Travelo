@@ -1,7 +1,7 @@
-from typing import Dict, List
+from typing import Dict, List  # typing helpers
 
 
-FOOD_LIBRARY = {
+FOOD_LIBRARY = {  # curated food and drink suggestions used as fallback
     "goa": {
         "foods": [
             {"name": "Goan fish curry", "why_try": "Coconut, kokum, and local spices make it a coastal classic.", "where_to_try": "beach shacks, family-run Goan restaurants, or fish thali places", "tip": "Pair it with rice and ask for the spice level before ordering."},
@@ -61,10 +61,10 @@ FOOD_LIBRARY = {
 
 
 def suggest_food_and_drink(destination: str) -> Dict[str, List[Dict]]:
-    key = destination.strip().lower()
+    key = destination.strip().lower()  # normalize destination
     suggestions = FOOD_LIBRARY.get(key)
     if not suggestions:
-        suggestions = {
+        suggestions = {  # generic fallback suggestions
             "foods": [
                 {"name": "Local food market", "why_try": "A practical way to sample regional snacks and specialties."},
                 {"name": "Signature street food", "why_try": "Ask locals or hotel staff for the safest busy stalls."},
@@ -80,5 +80,5 @@ def suggest_food_and_drink(destination: str) -> Dict[str, List[Dict]]:
         "destination": destination,
         "foods": suggestions["foods"],
         "drinks": suggestions["drinks"],
-        "source": "local_culinary_knowledge",
+        "source": "local_culinary_knowledge",  # mark this as local curated content
     }

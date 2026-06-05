@@ -1,3 +1,9 @@
+"""Unit tests for API parsing helpers in `routes.api_routes`.
+
+These validate message parsing, budget extraction, and the heuristics
+that decide whether the app should call tool-backed planning flows.
+"""
+
 from routes.api_routes import _extract_trip, _should_use_trip_tools
 
 

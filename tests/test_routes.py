@@ -1,3 +1,10 @@
+"""Integration-style tests for Flask routes used by the web UI and API.
+
+These tests spin up the Flask test client and exercise endpoints that
+depend on the app factory and history store. They use the app's built-in
+fallback behavior when external services are unavailable.
+"""
+
 from app import create_app
 
 

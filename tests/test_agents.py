@@ -1,3 +1,10 @@
+"""Tests for agent orchestration and interactions.
+
+These tests exercise the manager/orchestrator, itinerary, and LangChain
+manager integration at a high level. They are lightweight and rely on
+fallback logic when external APIs are not configured.
+"""
+
 from agents.manager.orchestrator import SmartTripOrchestrator
 from agents.manager.manager_agent import ManagerAgent
 from agents.itinerary.itinerary_agent import ItineraryAgent

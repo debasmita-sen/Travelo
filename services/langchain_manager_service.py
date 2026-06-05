@@ -44,7 +44,14 @@ class BudgetToolInput(BaseModel):
 
 
 class LangChainManagerService:
-    """LangChain/Groq manager adapter that runs the same project tools."""
+    """LangChain/Groq manager adapter that runs the same project tools.
+
+    This adapter wraps LangChain's ChatGroq integration and exposes the
+    project's internal tools (weather, attractions, route, food, budget, news)
+    as LangChain tools so Groq-driven tool-using flows can run inside the app.
+    If LangChain packages or API keys are missing, the adapter reports a
+    friendly `unavailable_reason` and falls back to deterministic local plan.
+    """
 
     def __init__(self, chat_model=None, tools: Optional[List[Any]] = None):
         self.unavailable_reason = ""
@@ -94,10 +101,12 @@ class LangChainManagerService:
 
     def _load_langchain_imports(self):
         try:
+            # Import LangChain pieces lazily so the app can run without them installed
             from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
             from langchain_core.tools import tool
             from langchain_groq import ChatGroq
         except ImportError as exc:
+            # Remember why LangChain features are unavailable
             self.unavailable_reason = f"LangChain packages not installed: {exc}. Using deterministic local planning output."
             return {}
         return {

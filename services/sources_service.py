@@ -61,6 +61,7 @@ def collect_web_sources(context: Dict[str, Any], destination: str = "") -> List[
         })
 
     for attraction in (context.get("attractions") or [])[:8]:
+        # Only include attractions that came from the Overpass/OpenStreetMap tool
         if attraction.get("source") != "openstreetmap_overpass":
             continue
         name = attraction.get("name") or "attraction"

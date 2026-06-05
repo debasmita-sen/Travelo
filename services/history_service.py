@@ -8,12 +8,18 @@ from config import DATABASE_PATH
 
 
 def init_history_store():
+    """Ensure the chat_history table exists and migrate older schemas.
+
+    Creates `chat_history` when missing. If the table exists but lacks
+    `conversation_id`, the function adds the column and populates each row
+    with a generated UUID so older rows are grouped under unique conversations.
+    """
     with _connect() as connection:
         # Check if table exists
         table_exists = connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='chat_history'"
         ).fetchone()
-        
+
         if not table_exists:
             # Create new table with conversation_id
             connection.execute(
@@ -33,7 +39,7 @@ def init_history_store():
             # Migrate existing table to add conversation_id if it doesn't exist
             columns = connection.execute("PRAGMA table_info(chat_history)").fetchall()
             column_names = [col[1] for col in columns]
-            
+
             if "conversation_id" not in column_names:
                 # Add conversation_id column and populate with UUIDs
                 connection.execute("ALTER TABLE chat_history ADD COLUMN conversation_id TEXT")
@@ -46,9 +52,10 @@ def init_history_store():
 
 
 def save_history_item(item_type: str, title: str, message: str, payload: Dict, conversation_id: Optional[str] = None) -> Dict:
+    """Save a message or report into the history store and return its metadata."""
     init_history_store()
     if not conversation_id:
-        conversation_id = str(uuid.uuid4())
+        conversation_id = str(uuid.uuid4())  # create a conversation id if not supplied
     created_at = datetime.now().isoformat(timespec="seconds")
     with _connect() as connection:
         cursor = connection.execute(
@@ -71,6 +78,7 @@ def save_history_item(item_type: str, title: str, message: str, payload: Dict, c
 
 
 def list_history(limit: int = 30) -> List[Dict]:
+    """Return a short list of recent conversation summaries (one row per convo)."""
     init_history_store()
     with _connect() as connection:
         rows = connection.execute(
@@ -104,11 +112,12 @@ def get_conversation(conversation_id: str) -> List[Dict]:
             """,
             (conversation_id,),
         ).fetchall()
-    
+
     return [_row_to_item(row) for row in rows]
 
 
 def delete_history_item(item_id: int) -> bool:
+    """Delete a single history row by id."""
     init_history_store()
     with _connect() as connection:
         cursor = connection.execute("DELETE FROM chat_history WHERE id = ?", (item_id,))
@@ -117,6 +126,7 @@ def delete_history_item(item_id: int) -> bool:
 
 
 def delete_conversation(conversation_id: str) -> bool:
+    """Delete all rows for a given conversation_id."""
     init_history_store()
     with _connect() as connection:
         cursor = connection.execute("DELETE FROM chat_history WHERE conversation_id = ?", (conversation_id,))

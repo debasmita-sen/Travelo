@@ -1,19 +1,19 @@
-from flask import Blueprint, redirect, render_template, request, session, url_for
+from flask import Blueprint, redirect, render_template, request, session, url_for  # flask helpers
 
-from agents.manager.orchestrator import SmartTripOrchestrator
-from models.trip import TripRequest
-from services.currency_service import parse_budget_value
+from agents.manager.orchestrator import SmartTripOrchestrator  # orchestrator to build plans
+from models.trip import TripRequest  # trip data model
+from services.currency_service import parse_budget_value  # parse numeric budget
 
-planner_bp = Blueprint("planner", __name__)
+planner_bp = Blueprint("planner", __name__)  # blueprint for planner UI
 
 
 @planner_bp.get("/planner")
 def planner():
-    return render_template("planner.html")
+    return render_template("planner.html")  # show the planner form
 
 
 @planner_bp.post("/planner")
-def create_plan():
+def create_plan():  # handle planner form submission
     destination = request.form.get("destination", "")
     budget_info = parse_budget_value(request.form.get("budget", 0), destination)
     trip = TripRequest(
@@ -29,6 +29,6 @@ def create_plan():
         budget_local_amount=budget_info["local_amount"],
         budget_local_currency=budget_info["local_currency"],
     )
-    result = SmartTripOrchestrator().plan(trip)
-    session["latest_plan"] = result
-    return redirect(url_for("dashboard.dashboard"))
+    result = SmartTripOrchestrator().plan(trip)  # generate the plan
+    session["latest_plan"] = result  # save to session for dashboard
+    return redirect(url_for("dashboard.dashboard"))  # redirect to dashboard
