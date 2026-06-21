@@ -89,8 +89,7 @@ def _extract_trip(payload):  # build a TripRequest from request payload and mess
     if budget_match and not payload.get("budget"):
         budget_info = parse_budget_text(message, destination)
 
-    interest_match = re.search(r"(?:interests?|likes?|focus(?:ed)? on)\s*:?
-\s*([A-Za-z,\s]+)", message, re.IGNORECASE)
+    interest_match = re.search(r"(?:interests?|likes?|focus(?:ed)? on)\s*:?\s*([A-Za-z,\s]+)", message, re.IGNORECASE)
     if interest_match and not payload.get("interests"):
         interests = interest_match.group(1).strip(" .")
 
