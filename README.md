@@ -1,3 +1,4 @@
+
 # Travelo
 
 **Author:** Souparno
@@ -380,3 +381,6 @@ hatch run python -m pytest tests/ -v
 ## Author
 
 **Souparno** — Travelo / SmartTripAI agentic travel planner.
+
+
+
