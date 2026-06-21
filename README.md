@@ -1,386 +1,353 @@
+🌍 Travelo - AI Powered Multi-Agent Travel Planner
+<div align="center">
+✈️ Plan Smarter. Travel Better. Powered by Agentic AI.
 
-# Travelo
+An intelligent Multi-Agent AI Travel Planner that generates personalized travel itineraries by combining real-time weather, attractions, route planning, crowd analysis, budget optimization, food recommendations, and destination news.
 
-**Author:** Souparno
+Instead of relying on a single AI response, Travelo orchestrates multiple specialized AI agents to provide accurate, explainable, and data-driven travel recommendations.
 
-Travelo is an agentic travel planning application. Instead of asking a single chat model to invent a trip from memory, Travelo runs a **manager-led multi-agent pipeline** that gathers live and local data (attractions, weather, routes, news, crowds, budget, food) and then uses an LLM only where synthesis and natural language help—while keeping structured planning reliable even when APIs or keys are missing.
+🚀 Developed using Agentic AI Architecture
 
----
+</div>
+🎯 Project Overview
 
-## What is Travelo?
+Travelo is an AI-powered travel planning platform built using a Multi-Agent Architecture.
 
-Travelo is a Flask web app that turns a trip request (destination, dates, budget, interests, origin) into a **structured travel dashboard**: day-by-day itinerary, budget status, weather outlook, routing hints, crowd guidance, food recommendations, news context, and a manager-written summary.
+Instead of a single Large Language Model attempting to solve every travel-related problem, Travelo delegates responsibilities to multiple specialized AI agents.
 
-Under the hood it is built as **SmartTripAI**:
+Each agent focuses on a specific domain, such as:
 
-- **Specialist agents** each own one domain (attractions, budget, weather, and so on).
-- **Tools** wrap external APIs and local datasets with stable interfaces.
-- **Services** hold HTTP clients, parsing, and deterministic fallbacks.
-- A **Manager Agent** (Groq or Gemini) reads all specialist outputs and produces a concise, honest trip brief.
-- An **Itinerary Agent** builds the day-by-day plan using the same LLM configuration as the manager.
+🏛️ Attractions
+🌦️ Weather
+🛣️ Route Planning
+📰 Travel News
+👥 Crowd Analysis
+🍽️ Food Recommendations
+💰 Budget Optimization
+🗓️ Itinerary Generation
 
-You can use Travelo through the browser (`/planner`, `/dashboard`) or the JSON API (`POST /api/plan`, chat endpoints).
+A central Manager Agent orchestrates these specialized agents and combines their outputs into a comprehensive travel plan.
 
----
+This approach significantly improves:
 
-## Why Travelo?
+Accuracy
+Reliability
+Explainability
+Scalability
+🚀 Key Features
+🗓️ Personalized Travel Itinerary
 
-| Problem with “just ask ChatGPT” | How Travelo addresses it |
-| --- | --- |
-| Models hallucinate venues, prices, and weather | Specialists call **real providers** (Overpass, WeatherAPI, OpenRouteService, NewsData.io) or **curated local JSON** |
-| One prompt cannot reliably orchestrate many APIs | A fixed **orchestrator pipeline** runs agents in a sensible order and passes context forward |
-| Generic answers ignore your budget and dates | `TripRequest` drives **budget checks**, **day count**, and **interest-based** attraction search |
-| App breaks when an API key is missing | Services **fall back** to deterministic local planning; the demo keeps running |
-| Travel questions mixed with side questions get lost | The manager prompt asks for both a **plan summary** and a **Side answer** when needed |
+Generate day-wise travel plans based on:
 
-Travelo is a **demo-grade but production-minded** architecture: clear separation between routes, agents, tools, and services, with tests under `tests/`.
+Destination
+Travel dates
+Budget
+Interests
+Number of travelers
+💰 Budget Optimization
 
----
+Analyze whether the trip budget is:
 
-## Why Travelo can be better than other LLMs (alone)
+Under Budget
+Balanced
+Over Budget
 
-A general-purpose LLM (ChatGPT, Claude, Gemini in a single chat box) is strong at language but weak as a **travel operating system** unless you bolt on tools yourself. Travelo is designed around that gap:
+using predefined city cost datasets.
 
-1. **Grounded data, not guesses**  
-   Attractions come from OpenStreetMap / Overpass; weather from WeatherAPI; routes from OpenRouteService; news from NewsData.io. The LLM **summarizes and narrates** what tools already fetched—it does not invent coordinates or closure dates.
+🌦️ Real-Time Weather Analysis
 
-2. **Purpose-built agents**  
-   Each agent has a narrow job and prompt (see `prompts/`). That beats one giant system prompt that must simultaneously be a geographer, meteorologist, economist, and chef.
+Fetch weather information and forecasts to recommend optimal activities.
 
-3. **Deterministic backbone**  
-   Budget scoring, crowd rules (`data/crowd_rules.json`), city costs (`data/city_costs.json`), and itinerary day scaffolding run **without** an LLM. If Groq/Gemini is down or unconfigured, you still get a usable plan.
+🏛️ Attraction Discovery
 
-4. **Controlled LLM use**  
-   Only the **Manager** and **Itinerary** agents call the LLM (`services/gemini_service.py`). Payload size is capped (`MAX_LLM_MESSAGE_CHARS`). HTTP 413 responses trigger local summaries instead of failing the whole trip.
+Discover tourist attractions using OpenStreetMap and Overpass APIs.
 
-5. **Transparent pipeline**  
-   API responses include a `pipeline` array: every agent’s output is visible for debugging and UI, not hidden inside one opaque model reply.
+🛣️ Route Planning
 
-6. **Travel-specific UX**  
-   Currency parsing, history, natural-language trip extraction in `api_routes.py`, and dashboard templates are built for **planning workflows**, not open-ended chat only.
+Generate travel routes and transportation recommendations.
 
-Travelo still uses LLMs where they shine (summary, prose, side questions). It does not claim to replace frontier models—it **combines** them with tools and structure so travel answers are more **accurate, inspectable, and repeatable**.
+🍽️ Food Recommendations
 
----
+Suggest local cuisines and famous food spots.
 
-## Step-by-step: how a trip is planned
+👥 Crowd Estimation
 
-### A. Web form flow (`POST /planner`)
+Estimate crowd levels using:
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Flask as planner_routes
-    participant Orch as SmartTripOrchestrator
-    participant Agents as Specialist agents
-    participant LLM as Groq / Gemini
-    participant Dash as dashboard
+Holidays
+Weather
+Events
+Travel dates
+📰 Destination News
 
-    User->>Flask: Submit destination, dates, budget, interests
-    Flask->>Flask: Build TripRequest, parse budget/currency
-    Flask->>Orch: plan(trip)
-    Orch->>Agents: Run attraction → budget → weather → news → route → crowd → food
-    Agents-->>Orch: Structured tool results
-    Orch->>LLM: Itinerary agent (context + trip)
-    Orch->>LLM: Manager synthesize (full context)
-    Orch-->>Flask: pipeline + context + manager_summary
-    Flask->>Flask: session["latest_plan"] = result
-    Flask->>Dash: Redirect to /dashboard
-```
+Fetch relevant travel news to keep travelers informed.
 
-1. **User opens** `http://127.0.0.1:5000/planner` and fills the form.
-2. **`planner_routes.create_plan`** parses the form, normalizes budget via `currency_service`, and builds a `TripRequest`.
-3. **`SmartTripOrchestrator.plan`** runs specialists **in order**:
-   - **Attraction Agent** — Overpass/Nominatim search by destination and interests.
-   - **Budget Agent** — Compares expected costs to budget using local cost data and rules.
-   - **Weather Agent** — Fetches current/forecast-style data from WeatherAPI (or fallback).
-   - **News Agent** — Destination-related headlines from NewsData.io (or fallback).
-   - **Route Agent** — Walking/transit hints from OpenRouteService when keyed.
-   - **Crowd Agent** — Combines weather, news, route, dates, and `crowd_rules.json`.
-   - **Food Agent** — Local and LLM-assisted food/drink suggestions for the destination.
-4. **Context dict** is assembled (attractions, budget, weather, news, route, crowds, food, optional `user_question`).
-5. **Itinerary Agent** builds per-day activities from attractions + weather + crowds, then asks the LLM for a short summary (or uses local text if no key).
-6. **Manager Agent** sends a trimmed context to the LLM and returns `manager_summary` (or `_local_summary` fallback).
-7. **Result** is stored in the Flask session and the user lands on the **dashboard** with charts, itinerary, and agent cards.
+🤖 AI-Powered Summary Generation
 
-### B. API / chat flow (`POST /api/plan` and related)
+Generate intelligent travel summaries using:
 
-- JSON body can include explicit fields or a natural-language `message` (destination and budget extracted with regex helpers).
-- Same orchestrator runs; response includes `trip`, `pipeline`, `context`, and `manager_summary`.
-- **General chat** (`GeneralChatAgent`) answers lightweight questions via Groq without running the full pipeline when appropriate.
+Google Gemini
+Groq
+🏗️ System Architecture
+User Input
+    │
+    ▼
+Planner Form
+    │
+    ▼
+Trip Request
+    │
+    ▼
+Manager Agent
+    │
+    ├── Attraction Agent
+    │
+    ├── Budget Agent
+    │
+    ├── Weather Agent
+    │
+    ├── News Agent
+    │
+    ├── Route Agent
+    │
+    ├── Crowd Agent
+    │
+    └── Food Agent
+    │
+    ▼
+Itinerary Agent
+    │
+    ▼
+Manager Summary
+    │
+    ▼
+Travel Dashboard
+🧠 Multi-Agent Workflow
+1️⃣ Attraction Agent
 
-### C. Server lifecycle
+Responsible for:
 
-- On each `python app.py` start, `create_app()` calls `clear_history()` so demo chat history resets (see `services/history_service.py`).
+Discovering attractions
+Filtering based on interests
+Gathering location data
 
----
+Provider:
 
-## Project layout (working directory)
+OpenStreetMap
+Overpass API
+2️⃣ Budget Agent
 
-Repository root: **`tragent/`** (project name on disk). The product name in the UI and docs is **Travelo**.
+Responsible for:
 
-```
+Budget estimation
+Cost comparison
+Expense categorization
+
+Dataset:
+
+city_costs.json
+3️⃣ Weather Agent
+
+Responsible for:
+
+Weather forecasts
+Travel suitability analysis
+
+Provider:
+
+WeatherAPI
+4️⃣ News Agent
+
+Responsible for:
+
+Destination news
+Important alerts
+
+Provider:
+
+NewsData.io
+5️⃣ Route Agent
+
+Responsible for:
+
+Route generation
+Transportation suggestions
+
+Provider:
+
+OpenRouteService
+6️⃣ Crowd Agent
+
+Responsible for:
+
+Crowd estimation
+Peak season analysis
+
+Dataset:
+
+crowd_rules.json
+7️⃣ Food Agent
+
+Responsible for:
+
+Local cuisine recommendations
+Food suggestions
+8️⃣ Itinerary Agent
+
+Responsible for:
+
+Day-wise travel planning
+Activity scheduling
+9️⃣ Manager Agent
+
+Responsible for:
+
+Combining all agent outputs
+Generating the final travel summary
+🛠️ Tech Stack
+Backend
+Python
+Flask
+AI Models
+Groq
+Google Gemini
+APIs
+OpenStreetMap
+Overpass API
+WeatherAPI
+OpenRouteService
+NewsData.io
+Database
+SQLite
+Environment Management
+Hatch
+Testing
+Pytest
+Version Control
+Git
+GitHub
+📂 Project Structure
 tragent/
-├── app.py                 # Flask entry: blueprints, secret key, history reset on boot
-├── config.py              # Loads .env; all API URLs, keys, limits (MAX_TRIP_DAYS, etc.)
-├── pyproject.toml         # Hatch project metadata and default virtual env (.venv)
-├── requirements.txt       # Pip-compatible dependency list (mirrors pyproject.toml)
-├── .env                   # Secrets and provider toggles (never commit)
-│
-├── agents/                # One folder per specialist + manager orchestration
-│   ├── manager/
-│   │   ├── orchestrator.py    # SmartTripOrchestrator — runs the full pipeline
-│   │   └── manager_agent.py   # LLM synthesis of final trip brief
-│   ├── attraction/        # OSM / Overpass attractions
-│   ├── budget/            # Budget fit vs city_costs.json
-│   ├── weather/           # WeatherAPI integration
-│   ├── news/              # NewsData.io headlines
-│   ├── route/             # OpenRouteService directions
-│   ├── crowd/             # Crowd levels from rules + other agents
-│   ├── food/              # Food and drink recommendations
-│   ├── itinerary/         # Day-by-day plan + LLM summary
-│   └── general_chat_agent.py  # Standalone Groq chat without full pipeline
-│
-├── tools/                 # Thin wrappers agents call (stable function boundaries)
-│   ├── attraction_tools.py
-│   ├── budget_tools.py
-│   ├── weather_tools.py
-│   ├── news_tools.py
-│   ├── route_tools.py
-│   └── food_tools.py
-│
-├── services/              # HTTP clients, business logic, fallbacks, SQLite history
-│   ├── gemini_service.py  # LLMService — Groq or Gemini for manager/itinerary
-│   ├── attraction_service.py, weather_service.py, route_service.py, ...
-│   ├── currency_service.py, budget_service.py, food_service.py
-│   ├── history_service.py # chat_history table read/write
-│   └── data_loader.py     # Loads JSON from data/
-│
-├── models/                # Dataclasses (TripRequest, budget, itinerary shapes)
-├── routes/                # Flask blueprints
-│   ├── home_routes.py     # GET /
-│   ├── planner_routes.py  # GET/POST /planner
-│   ├── dashboard_routes.py
-│   └── api_routes.py      # /api/plan, chat, history, health
-│
-├── prompts/               # Text prompts for agents (manager, itinerary, weather, …)
-├── data/                  # Offline datasets (no API key required)
-│   ├── city_costs.json
-│   ├── city_metadata.json
-│   ├── crowd_rules.json
-│   └── holidays.json
-│
+
+├── agents/
+├── routes/
+├── services/
+├── tools/
+├── models/
+├── prompts/
+├── templates/
+├── static/
+├── tests/
+├── data/
 ├── database/
-│   ├── schema.sql         # trips, plans, chat_history tables
-│   └── seed_data.sql      # Optional seed content
-│
-├── templates/             # Jinja2 HTML (home, planner, dashboard, itinerary, error)
-├── static/                # CSS and JS (planner.js, dashboard.js)
-├── tests/                 # pytest: agents, routes, services, tools
-└── docs/                  # architecture.md, setup_guide.md, api_documentation.md
-```
+├── docs/
 
-**Dependency direction (keep this in mind when editing):**
+├── app.py
+├── config.py
+├── requirements.txt
+├── pyproject.toml
+└── README.md
+⚙️ Installation
 
-`routes` → `agents` / `orchestrator` → `tools` → `services` → external APIs or `data/`  
-`agents` → `models` and `config`  
-UI reads session/API results; it does not call providers directly.
+Clone the repository:
 
----
+git clone https://github.com/debasmita-sen/Travelo.git
 
-## Hatch: virtual environment and project tooling
+Navigate into the project:
 
-This project uses **[Hatch](https://hatch.pypa.io/)** instead of manually creating `python -m venv` and juggling `pip install` for every machine. Hatch is a modern Python project manager from the PyPA ecosystem; here it acts as your **venv + dependency locker + run scripts**.
+cd Travelo
 
-### What Hatch does here
+Create environment:
 
-| Hatch feature | Role in Travelo |
-| --- | --- |
-| **Virtual env** | Creates and manages `.venv/` in the project root (`[tool.hatch.envs.default]` → `path = ".venv"`) |
-| **Dependencies** | Installs packages from `pyproject.toml` so everyone gets the same Flask, requests, pytest versions |
-| **Isolation** | Project deps stay inside `.venv`, not your global Python |
-| **Scripts** | Shortcuts: `hatch run app` starts Flask; `hatch run test` runs pytest |
-| **No manual activate** | `hatch run <command>` runs inside the env without remembering `Activate.ps1` |
-
-Hatch does **not** replace your `.env` API keys; it only manages Python packages and the interpreter environment.
-
-### Install Hatch (once per machine)
-
-```powershell
-pip install hatch
-```
-
-### First-time project setup
-
-From the repository root (`D:\tragent` or your clone path):
-
-```powershell
-# Create .venv and install dependencies from pyproject.toml
 hatch env create
 
-# Optional: open a shell already inside the virtual env
-hatch shell
-```
+Run the application:
 
-### Everyday commands
-
-```powershell
-# Run the web app (equivalent to: .venv\Scripts\python app.py)
 hatch run app
 
-# Run tests
-hatch run test
+Open:
 
-# Run any command inside the env without activating
-hatch run python -m pytest tests/test_routes.py -v
+http://127.0.0.1:5000
+🔑 Environment Variables
 
-# Recreate the env after dependency changes
-hatch env prune
-hatch env create
-```
+Create a .env file:
 
-### Hatch vs classic venv + pip
-
-| Step | Classic venv | Hatch (this repo) |
-| --- | --- | --- |
-| Create env | `python -m venv .venv` | `hatch env create` |
-| Activate | `.\.venv\Scripts\Activate.ps1` | optional; prefer `hatch run` |
-| Install deps | `pip install -r requirements.txt` | automatic on env create |
-| Run app | `python app.py` | `hatch run app` |
-
-You can still use `pip install -r requirements.txt` inside `.venv` if you prefer; `requirements.txt` is kept in sync for compatibility.
-
-### Troubleshooting Hatch
-
-If `hatch shell` or `hatch env create` fails with **maturin / Rust** errors, the cause is usually an old `pydantic` pin being built from source on **Python 3.14** (no wheel yet). This project avoids that by:
-
-- `skip-install = true` — Hatch installs dependencies only, not the repo as a wheel
-- No `pydantic` dependency (it was unused in the app)
-- `PYTHONPATH = "{root}"` so `agents`, `routes`, and `tools` import correctly without a package install
-
-To reset a broken env:
-
-```powershell
-Remove-Item -Recurse -Force .venv
-hatch env create
-```
-
-### Where Hatch stores things
-
-- **Project env:** `.venv/` (gitignored) — local to this folder.
-- **Hatch metadata:** may use a user-level cache; the important part is `.venv` beside `app.py`.
-
----
-
-## Quick start
-
-**Prerequisites:** Python 3.11+, [Hatch](https://hatch.pypa.io/latest/install/), API keys in `.env` (see below).
-
-```powershell
-cd D:\tragent
-hatch env create
-# Create .env in the project root (see Environment variables below)
-hatch run app
-```
-
-Open **http://127.0.0.1:5000** → **Planner** → submit a trip → view **Dashboard**.
-
-Missing or placeholder keys do **not** crash the app; services use deterministic local output where possible.
-
----
-
-## Environment variables (`.env`)
-
-| Variable | Purpose |
-| --- | --- |
-| `LLM_PROVIDER` | `groq` (default) or `gemini` — manager + itinerary |
-| `GROQ_API_KEY`, `GROQ_MODEL` | Groq chat completions |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | Google Gemini alternative |
-| `WEATHER_API_KEY`, `WEATHER_API_URL` | WeatherAPI current weather |
-| `OPENROUTESERVICE_API_KEY` | Walking route directions |
-| `NEWSDATA_API_KEY`, `NEWSDATA_API_URL` | Destination news |
-| `OVERPASS_API_URL`, `NOMINATIM_API_URL` | OpenStreetMap (no key) |
-| `FLASK_SECRET_KEY` | Session signing |
-| `DATABASE_PATH` | SQLite path (default: `database/smarttrip.db`) |
-
-Optional: `WEATHER_GEOCODING_API_URL`, `WEATHER_GEOCODING_API_KEY` (reserved for a future geocoder).
-
-Example:
-
-```env
 LLM_PROVIDER=groq
-GROQ_API_KEY=your_groq_key_here
 
-WEATHER_API_KEY=your_weatherapi_key_here
-OPENROUTESERVICE_API_KEY=your_ors_key_here
-NEWSDATA_API_KEY=your_newsdata_key_here
-```
+GROQ_API_KEY=
 
----
+GEMINI_API_KEY=
 
-## Agent and provider map
+WEATHER_API_KEY=
 
-| Agent | Provider | API key? | `.env` variables |
-| --- | --- | --- | --- |
-| Manager Agent | Groq or Gemini | Yes | `LLM_PROVIDER`, `GROQ_API_KEY`, `GEMINI_API_KEY` |
-| Itinerary Agent | Same as manager | Yes | Same as manager |
-| Attraction Agent | OpenStreetMap / Overpass | No | `OVERPASS_API_URL`, `NOMINATIM_API_URL` |
-| Budget Agent | Local JSON / database | No | — |
-| Weather Agent | WeatherAPI | Yes | `WEATHER_API_KEY`, `WEATHER_API_URL` |
-| Route Agent | OpenRouteService | Yes | `OPENROUTESERVICE_API_KEY` |
-| News Agent | NewsData.io | Yes | `NEWSDATA_API_KEY`, `NEWSDATA_API_URL` |
-| Crowd Agent | Derived + `crowd_rules.json` | No | — |
-| Food Agent | Local + context | No | — |
-| General Chat | Groq (via `GeneralChatAgent`) | Yes | `GROQ_API_KEY` |
+OPENROUTESERVICE_API_KEY=
 
----
+NEWSDATA_API_KEY=
 
-## API reference (short)
+FLASK_SECRET_KEY=
+📸 Application Screenshots
 
-**`POST /api/plan`**
+Add screenshots here:
 
-```json
-{
-  "destination": "Paris",
-  "origin": "CDG Airport",
-  "start_date": "2026-06-10",
-  "end_date": "2026-06-12",
-  "travelers": 2,
-  "budget": 1500,
-  "interests": "art, food"
-}
-```
+🏠 Home/Planner Page
 
-Response: `trip`, `pipeline`, `context`, `manager_summary`.
+<img width="1346" height="633" alt="image" src="https://github.com/user-attachments/assets/03c9372d-cac6-48f6-9db2-fa0f34fbb649" />
 
-Full details: [docs/api_documentation.md](docs/api_documentation.md).
+<img width="1352" height="628" alt="image" src="https://github.com/user-attachments/assets/5fad27f8-b9c0-40f3-925f-37faaae8c194" />
 
----
-<img width="1912" height="970" alt="Screenshot 2026-06-03 073335" src="https://github.com/user-attachments/assets/035effea-a548-4c58-b962-50bcc49599fe" />
-<img width="1919" height="967" alt="Screenshot 2026-06-03 073353" src="https://github.com/user-attachments/assets/85f7f702-bddc-496e-8af2-c6d03e7612c2" />
+🗓️ Generated Itinerary with Tools On
 
+<img width="1353" height="613" alt="image" src="https://github.com/user-attachments/assets/026cab7f-20c5-4826-8ed4-cb36eee2f159" />
 
-## Testing
+<img width="1355" height="623" alt="image" src="https://github.com/user-attachments/assets/37ced893-0880-4717-b4f4-e51c5a199205" />
 
-```powershell
-hatch run test
-# or
-hatch run python -m pytest tests/ -v
-```
+<img width="1355" height="613" alt="image" src="https://github.com/user-attachments/assets/1bf4657c-78dc-4f93-99fb-39073d0bc5aa" />
 
----
+🗓️ Generated Details with Tools Off
 
-## Further reading
+<img width="1311" height="604" alt="image" src="https://github.com/user-attachments/assets/226a0c37-b72b-4dd5-930e-45e77c200204" />
 
-- [docs/architecture.md](docs/architecture.md) — component overview  
-- [docs/setup_guide.md](docs/setup_guide.md) — legacy venv + pip setup  
-- [docs/api_documentation.md](docs/api_documentation.md) — HTTP API  
+🎓 Academic Association
 
----
+Developed as part of:
 
-## Author
+Anudip AI Centre of Excellence: Advanced Data Analytics with AI
 
-**Souparno** — Travelo / SmartTripAI agentic travel planner.
+🔮 Future Enhancements
+🌐 Multi-language support
+🗺️ Interactive maps
+🏨 Hotel recommendations
+✈️ Flight integration
+💳 Dynamic cost prediction
+📱 Mobile application
+🧠 Advanced AI memory
+🎙️ Voice-based planning
+🧳 Travel document assistant
+📈 Personalized travel analytics
+💼 Project Impact
 
+Travelo demonstrates expertise in:
 
+Agentic AI
+Multi-Agent Systems
+Python Development
+API Integration
+AI Orchestration
+Backend Development
+Data Engineering Concepts
+Prompt Engineering
+Travel Recommendation Systems
+👥 Project Team
+🚀 Developed By
 
+Debasmita Sen (@debasmita-sen)
+
+Souparno
+
+📄 License
+
+This project is licensed under the MIT License.
+
+⭐ If you found this project interesting, consider giving it a star!
+
+Travelo — Plan Smarter. Travel Better.
